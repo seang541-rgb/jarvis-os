@@ -275,7 +275,7 @@
         });
 
         try {
-            const modelUrl = '/models/shizuku.model.json';
+            const modelUrl = 'https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/shizuku/shizuku.model.json';
             live2dModel = await PIXI.live2d.Live2DModel.from(modelUrl, { autoInteract: false });
 
             const scale = Math.min(

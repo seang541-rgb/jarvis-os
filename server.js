@@ -21,9 +21,22 @@ const MIMO_API_URL = 'https://token-plan-sgp.xiaomimimo.com/v1';
 const MIMO_API_KEY = process.env.MIMO_API_KEY || '';
 const MIMO_MODEL = 'mimo-v2.5-pro';
 
-if (!MIMO_API_KEY) {
-    console.warn('⚠️  未设置 MIMO_API_KEY 环境变量！');
-    console.warn('请设置: set MIMO_API_KEY=your_key_here');
+// NVIDIA API (Qwen)
+const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
+const NVIDIA_MODEL = 'qwen/qwen2.5-72b-instruct';
+
+// Active API config (switchable)
+let activeAPI = {
+    name: 'nvidia',
+    url: NVIDIA_API_URL,
+    key: NVIDIA_API_KEY,
+    model: NVIDIA_MODEL,
+};
+
+if (!MIMO_API_KEY && !NVIDIA_API_KEY) {
+    console.warn('⚠️  未设置任何 API KEY！');
+    console.warn('请设置: set MIMO_API_KEY=xxx 或 set NVIDIA_API_KEY=xxx');
 }
 
 // HomeAssistant Config (user will configure later)
@@ -107,14 +120,14 @@ ${memoryStore.conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')
 
 只返回JSON，不要其他文字。`;
 
-            const response = await fetch(`${MIMO_API_URL}/chat/completions`, {
+            const response = await fetch(`${activeAPI.url}/chat/completions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${MIMO_API_KEY}`
+                    'Authorization': `Bearer ${activeAPI.key}`
                 },
                 body: JSON.stringify({
-                    model: MIMO_MODEL,
+                    model: activeAPI.model,
                     messages: [{ role: 'user', content: summaryPrompt }],
                     max_tokens: 300,
                     temperature: 0.3
@@ -478,6 +491,22 @@ app.delete('/api/memory', (req, res) => {
     memoryStore = { userProfile: {}, memories: [], conversationHistory: [] };
     saveMemories(memoryStore);
     res.json({ success: true });
+});
+
+app.get('/api/model', (req, res) => {
+    res.json({ active: activeAPI.name, model: activeAPI.model });
+});
+
+app.post('/api/model', (req, res) => {
+    const { provider } = req.body;
+    if (provider === 'nvidia') {
+        activeAPI = { name: 'nvidia', url: NVIDIA_API_URL, key: NVIDIA_API_KEY, model: NVIDIA_MODEL };
+    } else if (provider === 'mimo') {
+        activeAPI = { name: 'mimo', url: MIMO_API_URL, key: MIMO_API_KEY, model: MIMO_MODEL };
+    } else {
+        return res.status(400).json({ error: '未知模型提供商' });
+    }
+    res.json({ success: true, active: activeAPI.name, model: activeAPI.model });
 });
 
 // API endpoint to configure HomeAssistant
@@ -1188,14 +1217,14 @@ async function streamMiMoAPI(messages, ws, sessionId) {
     ];
 
     try {
-        const response = await fetch(`${MIMO_API_URL}/chat/completions`, {
+        const response = await fetch(`${activeAPI.url}/chat/completions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${MIMO_API_KEY}`
+                'Authorization': `Bearer ${activeAPI.key}`
             },
             body: JSON.stringify({
-                model: MIMO_MODEL,
+                model: activeAPI.model,
                 messages: formattedMessages,
                 max_tokens: 1000,
                 temperature: 0.7,

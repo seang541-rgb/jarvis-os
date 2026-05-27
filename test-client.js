@@ -18,7 +18,7 @@ ws.on('open', () => {
 
 ws.on('message', (data) => {
     const message = JSON.parse(data.toString());
-    console.log(`\nMimo: ${message.text}`);
+    console.log(`\n丞相: ${message.text}`);
     
     // Send another message after receiving response
     if (message.type === 'response') {

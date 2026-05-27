@@ -1,4 +1,4 @@
-# Mimo 唤醒功能使用指南
+# 丞相 唤醒功能使用指南
 
 ## 快速开始
 
@@ -6,21 +6,21 @@
 
 1. 双击 `start-jarvis.bat` 启动
 2. 在浏览器中打开 http://localhost:3000
-3. 按 `Ctrl+Space` 激活 Mimo
+3. 按 `Ctrl+Space` 激活 丞相
 4. 说出指令
 
 ### 方式2：语音唤醒（推荐）
 
 1. 注册 Picovoice 账号：https://console.picovoice.ai/
 2. 获取免费 Access Key
-3. 在控制台创建自定义唤醒词 "Mimo"，下载 `.ppn` 文件
-4. 将文件命名为 `mimo_wake_word.ppn` 放到项目根目录
+3. 在控制台创建自定义唤醒词 "丞相"，下载 `.ppn` 文件
+4. 将文件命名为 `chengxiang_wake_word.ppn` 放到项目根目录
 5. 设置环境变量：
    ```cmd
    set PORCUPINE_KEY=your_access_key
    ```
 6. 双击 `start-jarvis.bat` 启动
-7. 说 "Mimo" 唤醒
+7. 说 "丞相" 唤醒
 
 ---
 
@@ -28,7 +28,7 @@
 
 | 唤醒词 | 说明 |
 |--------|------|
-| `Mimo` | 自定义唤醒词 |
+| `丞相` | 自定义唤醒词 |
 | `Ctrl+Space` | 热键唤醒 |
 
 ---
@@ -37,26 +37,26 @@
 
 ### 场景1：电脑前工作
 ```
-你：Mimo
-Mimo：[激活动画] 请说...
+你：丞相
+丞相：[激活动画] 请说...
 你：打开Chrome浏览器
-Mimo：已打开 Chrome
+丞相：已打开 Chrome
 ```
 
 ### 场景2：控制智能家居
 ```
 你：Ctrl+Space
-Mimo：[激活]
+丞相：[激活]
 你：打开客厅灯
-Mimo：已打开 客厅灯
+丞相：已打开 客厅灯
 ```
 
 ### 场景3：查天气
 ```
-你：Mimo
-Mimo：[激活]
+你：丞相
+丞相：[激活]
 你：今天天气怎么样
-Mimo：先生，今天晴，25°C，适合外出。
+丞相：主公，今天晴，25°C，适合外出。
 ```
 
 ---
@@ -76,11 +76,11 @@ Mimo：先生，今天晴，25°C，适合外出。
 
 ## 故障排除
 
-### Q: 说 "Mimo" 没反应？
+### Q: 说 "丞相" 没反应？
 A: 
 1. 检查 Access Key 是否正确
 2. 检查麦克风权限
-3. 确认已下载并放置 `mimo_wake_word.ppn` 文件
+3. 确认已下载并放置 `chengxiang_wake_word.ppn` 文件
 4. 尝试提高灵敏度
 
 ### Q: 热键不工作？
@@ -111,7 +111,7 @@ A:
 │                            │            │
 │                            ▼            │
 │  ┌─────────────┐    ┌─────────────┐    │
-│  │    Mimo     │◀───│  WebSocket  │    │
+│  │    丞相      │◀───│  WebSocket  │    │
 │  │   服务器     │    │   连接      │    │
 │  └─────────────┘    └─────────────┘    │
 │                                         │
@@ -129,4 +129,4 @@ A:
 ## 获取帮助
 
 - Picovoice 文档：https://picovoice.ai/docs/
-- Mimo 问题反馈：创建 GitHub Issue
+- 丞相 问题反馈：创建 GitHub Issue

@@ -461,10 +461,10 @@ app.get('/api/ha/device/:entity_id', async (req, res) => {
 });
 
 // System prompt with smart home context
-const SYSTEM_PROMPT = `你是Mimo，一个智能AI助手。你的特点是：
+const SYSTEM_PROMPT = `你是丞相，一个智能AI助手，名字灵感来自诸葛亮。你的特点是：
 - 说话简洁、专业
 - 用中文回复
-- 称呼用户为"先生"或"Boss"
+- 称呼用户为"主公"
 - 回复控制在50字以内，适合语音播报
 
 你可以使用以下工具：
@@ -1084,5 +1084,5 @@ async function streamMiMoAPI(messages, ws, sessionId) {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Mimo server running on http://localhost:${PORT}`);
+    console.log(`丞相 server running on http://localhost:${PORT}`);
 });

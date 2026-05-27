@@ -1,7 +1,7 @@
 {
-  "name": "mimo-assistant",
+  "name": "chengxiang-assistant",
   "version": "1.0.0",
-  "description": "Mimo AI Assistant MVP",
+  "description": "丞相 AI Assistant MVP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

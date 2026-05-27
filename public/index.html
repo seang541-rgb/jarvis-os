@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mimo - AI Voice Assistant</title>
+    <title>丞相 - AI Voice Assistant</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 
@@ -420,14 +420,14 @@
         </div>
 
         <!-- Status -->
-        <div class="status" id="status">说 "Mimo" 唤醒我</div>
+        <div class="status" id="status">说 "丞相" 唤醒我</div>
         <div class="subtitle" id="subtitle">或按住麦克风按钮说话</div>
 
         <!-- Transcript -->
         <div class="transcript-container" id="transcript">
             <div class="transcript-entry">
-                <div class="transcript-label">Mimo</div>
-                <div class="transcript-text ai">晚上好，先生。随时准备为您服务。</div>
+                <div class="transcript-label">丞相</div>
+                <div class="transcript-text ai">主公，丞相在此，随时听候差遣。</div>
             </div>
         </div>
 
@@ -468,7 +468,7 @@
 
         <div class="settings-group">
             <div class="settings-label">唤醒词</div>
-            <div class="settings-value">Mimo</div>
+            <div class="settings-value">丞相</div>
         </div>
 
         <div class="settings-group">
@@ -590,7 +590,7 @@
                 statusEl.textContent = '正在回复...';
                 statusEl.className = 'status speaking';
             } else {
-                statusEl.textContent = '说 "Mimo" 唤醒我';
+                statusEl.textContent = '说 "丞相" 唤醒我';
                 statusEl.className = 'status';
             }
 
@@ -613,7 +613,7 @@
             
             ws.onopen = () => {
                 isConnected = true;
-                console.log('Connected to Mimo');
+                console.log('Connected to 丞相');
                 showNotification('✅ 已连接');
                 
                 // Send any queued messages
@@ -649,7 +649,7 @@
 
             ws.onclose = () => {
                 isConnected = false;
-                console.log('Disconnected from Mimo');
+                console.log('Disconnected from 丞相');
                 setTimeout(connect, 2000);
             };
 
@@ -852,7 +852,7 @@
             const entry = document.createElement('div');
             entry.className = 'transcript-entry';
             entry.innerHTML = `
-                <div class="transcript-label">Mimo</div>
+                <div class="transcript-label">丞相</div>
                 <div class="transcript-text ai">${text}</div>
             `;
             transcriptEl.appendChild(entry);
@@ -861,7 +861,7 @@
 
         function updateLastAIEntry(text) {
             let lastAI = transcriptEl.querySelector('.transcript-entry:last-child .transcript-text.ai');
-            if (!lastAI || lastAI.parentElement.querySelector('.transcript-label').textContent !== 'Mimo') {
+            if (!lastAI || lastAI.parentElement.querySelector('.transcript-label').textContent !== '丞相') {
                 addAIEntry(text);
             } else {
                 lastAI.textContent = text;
@@ -872,7 +872,7 @@
         function clearTranscript() {
             transcriptEl.innerHTML = `
                 <div class="transcript-entry">
-                <div class="transcript-label">Mimo</div>
+                <div class="transcript-label">丞相</div>
                 <div class="transcript-text ai">对话已清空。有什么可以帮您的？</div>
                 </div>
             `;
@@ -985,7 +985,7 @@
         
         // Auto-start listening after a delay
         setTimeout(() => {
-            showNotification('🎤 说 "Mimo" 唤醒');
+            showNotification('🎤 说 "丞相" 唤醒');
         }, 1000);
     </script>
 </body>

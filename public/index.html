@@ -885,49 +885,37 @@
                 return;
             }
 
-            if ('speechSynthesis' in window) {
-                speechSynthesis.cancel();
+            if (!('speechSynthesis' in window)) return;
 
-                stopListening();
+            speechSynthesis.cancel();
+            stopListening();
 
+            function doSpeak() {
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'zh-CN';
                 utterance.rate = 0.88;
                 utterance.pitch = 0.82;
                 utterance.volume = 1.0;
 
-                const voices = speechSynthesis.getVoices();
-                const preferred = [
-                    'Microsoft Kangkang',
-                    'Microsoft Huihui',
-                    'Google 普通话（中国大陆）',
-                    'Google 中文（中国大陆）',
-                    'Ting-Ting',
-                    'Sin-ji'
-                ];
-                let voice = null;
-                for (const name of preferred) {
-                    voice = voices.find(v => v.name.includes(name) && v.lang.startsWith('zh'));
-                    if (voice) break;
+                const voices = cachedVoices.length > 0 ? cachedVoices : speechSynthesis.getVoices();
+                const zhVoices = voices.filter(v => v.lang.startsWith('zh'));
+
+                if (zhVoices.length > 0) {
+                    console.log('🗣️ 候选中文声音:', zhVoices.map(v => `${v.name} [${v.lang}]`).join(', '));
+                    utterance.voice = zhVoices[0];
+                    console.log('🗣️ 使用声音:', zhVoices[0].name);
                 }
-                if (!voice) {
-                    voice = voices.find(v => v.lang.startsWith('zh'));
-                }
-                if (voice) {
-                    utterance.voice = voice;
-                    console.log('🗣️ 使用声音:', voice.name);
-                }
-                
+
                 utterance.onstart = () => {
                     state.speaking = true;
                     updateUI();
-                    console.log('🗣️ TTS 播放中，麦克风已暂停');
+                    console.log('🗣️ TTS 播放中');
                 };
                 
                 utterance.onend = () => {
                     state.speaking = false;
                     updateUI();
-                    console.log('🔇 TTS 结束，恢复麦克风');
+                    console.log('🔇 TTS 结束');
                     
                     if (state.continuous) {
                         setTimeout(() => startListening(), 800);
@@ -935,6 +923,17 @@
                 };
                 
                 speechSynthesis.speak(utterance);
+            }
+
+            const voices = cachedVoices.length > 0 ? cachedVoices : speechSynthesis.getVoices();
+            if (voices.length === 0) {
+                console.log('⏳ 等待声音加载...');
+                speechSynthesis.onvoiceschanged = () => {
+                    cachedVoices = speechSynthesis.getVoices();
+                    doSpeak();
+                };
+            } else {
+                doSpeak();
             }
         }
 
@@ -1005,13 +1004,18 @@
         }
 
         // ========== Initialize ==========
+        let cachedVoices = [];
+
+        function loadVoices() {
+            cachedVoices = speechSynthesis.getVoices();
+            const zhVoices = cachedVoices.filter(v => v.lang.startsWith('zh'));
+            console.log('🗣️ 所有声音:', cachedVoices.map(v => `${v.name} (${v.lang})`).join(', '));
+            console.log('🗣️ 中文声音:', zhVoices.map(v => `${v.name} [${v.lang}]`).join(', ') || '无');
+        }
+
         if ('speechSynthesis' in window) {
-            speechSynthesis.getVoices();
-            speechSynthesis.onvoiceschanged = () => {
-                const voices = speechSynthesis.getVoices();
-                const zhVoices = voices.filter(v => v.lang.startsWith('zh'));
-                console.log('🗣️ 可用中文声音:', zhVoices.map(v => v.name).join(', ') || '无');
-            };
+            loadVoices();
+            speechSynthesis.onvoiceschanged = loadVoices;
         }
 
         updateUI();

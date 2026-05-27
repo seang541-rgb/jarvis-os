@@ -14,8 +14,13 @@ const wss = new WebSocket.Server({ server });
 
 // MiMo API
 const MIMO_API_URL = 'https://token-plan-sgp.xiaomimimo.com/v1';
-const MIMO_API_KEY = 'tp-srwcs27knljqs64edmc6s9k86msff36xpgrmujcsxy0c5kr6';
+const MIMO_API_KEY = process.env.MIMO_API_KEY || '';
 const MIMO_MODEL = 'mimo-v2.5-pro';
+
+if (!MIMO_API_KEY) {
+    console.warn('⚠️  未设置 MIMO_API_KEY 环境变量！');
+    console.warn('请设置: set MIMO_API_KEY=your_key_here');
+}
 
 // HomeAssistant Config (user will configure later)
 let HA_URL = process.env.HA_URL || '';

@@ -314,7 +314,7 @@
         if (!live2dModel) return;
         try {
             if (orbState === 'speaking') {
-                live2dModel.expression('f01');
+                cycleSpeakingExpression();
             } else if (orbState === 'listening') {
                 live2dModel.expression('f02');
             } else {
@@ -323,14 +323,43 @@
         } catch (e) {}
     }
 
+    let speakExprTimer = null;
+    let lastSpeakExpr = '';
+    const speakExpressions = ['f01', 'f02', 'f03', 'f04', 'f05'];
+
+    function cycleSpeakingExpression() {
+        if (speakExprTimer) return;
+        const pick = () => {
+            let expr = speakExpressions[Math.floor(Math.random() * speakExpressions.length)];
+            if (expr === lastSpeakExpr) expr = speakExpressions[(speakExpressions.indexOf(expr) + 1) % speakExpressions.length];
+            lastSpeakExpr = expr;
+            try { live2dModel.expression(expr); } catch(e) {}
+        };
+        pick();
+        speakExprTimer = setInterval(() => { if (orbState === 'speaking') pick(); else { clearInterval(speakExprTimer); speakExprTimer = null; } }, 1500 + Math.random() * 1000);
+    }
+
     function updateLive2DLipSync(audioLevel) {
         if (!live2dModel) return;
         try {
             const coreModel = live2dModel.internalModel?.coreModel;
             if (!coreModel) return;
-            const paramIndex = coreModel.getParameterIndex('ParamMouthOpenY');
-            if (paramIndex >= 0) {
-                coreModel.setParameterValueById('ParamMouthOpenY', audioLevel * 1.5);
+            const mouthIdx = coreModel.getParameterIndex('ParamMouthOpenY');
+            if (mouthIdx >= 0) coreModel.setParameterValueById('ParamMouthOpenY', audioLevel * 2.0);
+            const angleIdx = coreModel.getParameterIndex('ParamAngleZ');
+            if (angleIdx >= 0) coreModel.setParameterValueById('ParamAngleZ', Math.sin(Date.now() * 0.001) * 8 + audioLevel * 5);
+            const bodyIdx = coreModel.getParameterIndex('ParamBodyAngleX');
+            if (bodyIdx >= 0) coreModel.setParameterValueById('ParamBodyAngleX', Math.sin(Date.now() * 0.0007) * 3);
+            const eyeIdx = coreModel.getParameterIndex('ParamEyeLOpen');
+            if (eyeIdx >= 0 && Math.random() < 0.005) {
+                coreModel.setParameterValueById('ParamEyeLOpen', 0);
+                coreModel.setParameterValueById('ParamEyeROpen', 0);
+                setTimeout(() => {
+                    try {
+                        coreModel.setParameterValueById('ParamEyeLOpen', 1);
+                        coreModel.setParameterValueById('ParamEyeROpen', 1);
+                    } catch(e) {}
+                }, 150);
             }
         } catch (e) {}
     }

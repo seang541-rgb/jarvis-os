@@ -24,7 +24,7 @@ const MIMO_MODEL = 'mimo-v2.5-pro';
 // NVIDIA API (Qwen)
 const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
-const NVIDIA_MODEL = 'qwen/qwen2.5-72b-instruct';
+const NVIDIA_MODEL = 'qwen/qwen3.5-122b-a10b';
 
 // Active API config (switchable)
 let activeAPI = {

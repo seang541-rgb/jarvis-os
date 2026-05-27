@@ -388,8 +388,12 @@
             else if (d.type === 'response_chunk') { currentTranscript += d.text; updateLastAIEntry(currentTranscript); }
             else if (d.type === 'response_end') {
                 state.speaking = false; updateUI();
-                if (d.fullText && state.ttsEnabled) speak(d.fullText);
-                else if (state.continuous) setTimeout(() => startListening(), 500);
+                const songMatch = d.fullText?.match(/《(.+?)》/);
+                if (songMatch && d.fullText.includes('演唱')) {
+                    sing(songMatch[1]);
+                } else if (d.fullText && state.ttsEnabled) {
+                    speak(d.fullText);
+                } else if (state.continuous) setTimeout(() => startListening(), 500);
             }
         };
         ws.onclose = () => { isConnected = false; setTimeout(connect, 2000); };
@@ -459,11 +463,30 @@
         }).catch(() => { state.speaking = false; updateUI(); if (state.continuous) setTimeout(() => startListening(), 800); });
     }
 
+    function sing(songName) {
+        stopListening(); state.speaking = true; updateUI(); initAudioContext();
+        fetch('/api/sing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ song: songName }) })
+        .then(r => r.json()).then(data => {
+            if (data.error) { state.speaking = false; updateUI(); speak(data.error); return; }
+            const binary = atob(data.audio);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const blob = new Blob([bytes], { type: 'audio/mpeg' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url); audio.crossOrigin = 'anonymous';
+            audio.onplay = () => { connectAudioElement(audio); addAIEntry(`♪ 正在演唱《${data.song}》...`); };
+            audio.onended = () => { state.speaking = false; updateUI(); URL.revokeObjectURL(url); if (state.continuous) setTimeout(() => startListening(), 800); };
+            audio.onerror = () => { state.speaking = false; updateUI(); URL.revokeObjectURL(url); if (state.continuous) setTimeout(() => startListening(), 800); };
+            audio.play().catch(() => { state.speaking = false; updateUI(); URL.revokeObjectURL(url); });
+        }).catch(() => { state.speaking = false; updateUI(); if (state.continuous) setTimeout(() => startListening(), 800); });
+    }
+
     // ============================================================
     //  TRANSCRIPT
     // ============================================================
     function sendMessage(text) { if (!text.trim()) return; subtitleEl.textContent = ''; const msg = JSON.stringify({ type: 'chat', text }); if (isConnected && ws.readyState === WebSocket.OPEN) ws.send(msg); }
     function addUserEntry(text) { const el = document.createElement('div'); el.className = 'entry'; el.innerHTML = `<div class="entry-label">YOU</div><div class="entry-text user">${text}</div>`; transcriptEl.appendChild(el); transcriptEl.scrollTop = transcriptEl.scrollHeight; }
+    function addAIEntry(text) { const el = document.createElement('div'); el.className = 'entry'; el.innerHTML = `<div class="entry-label">OICHI</div><div class="entry-text ai">${text}</div>`; transcriptEl.appendChild(el); transcriptEl.scrollTop = transcriptEl.scrollHeight; }
     function updateLastAIEntry(text) {
         let last = transcriptEl.querySelector('.entry:last-child .entry-text.ai');
         if (!last || last.parentElement.querySelector('.entry-label').textContent !== 'ZIFANG') {

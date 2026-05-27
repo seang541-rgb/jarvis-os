@@ -3,1010 +3,750 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>丞相 - AI Voice Assistant</title>
+    <title>丞相 - AI Assistant</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --bg: #050510;
+            --bg: #030308;
             --accent: #00d4ff;
             --accent2: #7b2fff;
-            --glow: rgba(0, 212, 255, 0.4);
+            --speak: #00ff88;
+            --warn: #ff6b35;
         }
 
         body {
-            font-family: 'Rajdhani', sans-serif;
+            font-family: 'Noto Sans SC', sans-serif;
             background: var(--bg);
             color: #e0e8ff;
             height: 100vh;
             overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
-        /* Background Particles */
-        #particles {
+        canvas#fx {
             position: fixed;
             inset: 0;
             z-index: 0;
         }
 
-        /* Main Container */
-        .container {
-            position: relative;
+        .hud {
+            position: fixed;
+            inset: 0;
             z-index: 1;
-            text-align: center;
-            width: 100%;
-            max-width: 600px;
-            padding: 40px;
-        }
-
-        /* Orb */
-        .orb-container {
-            position: relative;
-            width: 200px;
-            height: 200px;
-            margin: 0 auto 40px;
-        }
-
-        .orb {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 35%, var(--accent), var(--accent2));
-            box-shadow: 0 0 60px var(--glow), 0 0 120px rgba(123, 47, 255, 0.3);
-            animation: float 4s ease-in-out infinite;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s;
+            pointer-events: none;
         }
 
-        .orb.listening {
-            animation: pulse-listen 1.5s ease-in-out infinite;
-            box-shadow: 0 0 80px var(--glow), 0 0 160px rgba(123, 47, 255, 0.4);
+        .orb-wrap {
+            position: relative;
+            width: 220px;
+            height: 220px;
+            margin-bottom: 24px;
         }
 
-        .orb.speaking {
-            animation: pulse-speak 0.8s ease-in-out infinite;
-            box-shadow: 0 0 100px rgba(0, 255, 136, 0.4), 0 0 200px rgba(0, 255, 136, 0.2);
-            background: radial-gradient(circle at 35% 35%, #00ff88, #00cc6a);
+        #orb-canvas {
+            width: 220px;
+            height: 220px;
         }
 
-        .orb-icon {
-            font-size: 60px;
-            transition: all 0.3s;
+        .status-bar {
+            font-family: 'Orbitron', monospace;
+            font-size: 0.75rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 8px;
+            opacity: 0.8;
+            transition: color 0.5s;
         }
 
-        .orb-ring {
-            position: absolute;
-            inset: -20px;
-            border-radius: 50%;
-            border: 2px solid var(--accent);
-            opacity: 0.3;
-            animation: ring-rotate 8s linear infinite;
+        .status-bar.speaking { color: var(--speak); }
+        .status-bar.thinking { color: var(--warn); }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #6b7db3;
+            margin-bottom: 28px;
+            min-height: 20px;
+            transition: color 0.3s;
         }
 
-        .orb-ring:nth-child(2) {
-            inset: -40px;
-            border-color: var(--accent2);
-            animation-duration: 12s;
-            animation-direction: reverse;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-15px); }
-        }
-
-        @keyframes pulse-listen {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 60px var(--glow); }
-            50% { transform: scale(1.05); box-shadow: 0 0 100px var(--glow); }
-        }
-
-        @keyframes pulse-speak {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.08); }
-        }
-
-        @keyframes ring-rotate {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Waveform */
         .waveform {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
-            height: 80px;
-            margin-bottom: 30px;
+            gap: 3px;
+            height: 60px;
+            margin-bottom: 28px;
         }
 
         .wave-bar {
-            width: 4px;
-            height: 4px;
-            background: linear-gradient(to top, var(--accent), var(--accent2));
+            width: 3px;
+            height: 3px;
             border-radius: 2px;
-            transition: height 0.1s ease;
+            background: var(--accent);
+            transition: height 0.05s;
         }
 
-        /* Status */
-        .status {
-            font-size: 1.2rem;
-            color: var(--accent);
-            margin-bottom: 12px;
-            font-weight: 500;
-            min-height: 30px;
-        }
-
-        .status.speaking {
-            color: #00ff88;
-        }
-
-        .subtitle {
-            font-size: 0.9rem;
-            color: #6b7db3;
-            margin-bottom: 30px;
-            min-height: 24px;
-        }
-
-        /* Transcript */
-        .transcript-container {
-            background: rgba(10, 15, 30, 0.8);
-            border: 1px solid rgba(0, 212, 255, 0.2);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 30px;
-            min-height: 120px;
-            max-height: 300px;
+        .transcript-box {
+            width: 90%;
+            max-width: 520px;
+            background: rgba(5, 8, 20, 0.85);
+            border: 1px solid rgba(0, 212, 255, 0.15);
+            border-radius: 12px;
+            padding: 16px 20px;
+            max-height: 240px;
             overflow-y: auto;
             text-align: left;
+            backdrop-filter: blur(10px);
         }
 
-        .transcript-entry {
-            margin-bottom: 16px;
-            animation: fadeIn 0.3s ease;
-        }
+        .entry { margin-bottom: 14px; animation: fadeUp 0.3s ease; }
+        .entry:last-child { margin-bottom: 0; }
+        .entry-label { font-size: 0.65rem; color: #4a5a8a; margin-bottom: 3px; letter-spacing: 1px; }
+        .entry-text { font-size: 0.9rem; line-height: 1.6; }
+        .entry-text.user { color: #c8d6f0; }
+        .entry-text.ai { color: var(--accent); }
 
-        .transcript-entry:last-child {
-            margin-bottom: 0;
-        }
-
-        .transcript-label {
-            font-size: 0.75rem;
-            color: #6b7db3;
-            margin-bottom: 4px;
-        }
-
-        .transcript-text {
-            font-size: 1rem;
-            line-height: 1.5;
-        }
-
-        .transcript-text.user {
-            color: #e0e8ff;
-        }
-
-        .transcript-text.ai {
-            color: var(--accent);
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Controls */
         .controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
             display: flex;
-            justify-content: center;
-            gap: 16px;
+            gap: 14px;
+            z-index: 10;
+            pointer-events: auto;
         }
 
         .btn {
-            width: 56px;
-            height: 56px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             border: none;
             cursor: pointer;
-            transition: all 0.3s;
+            font-size: 1.2rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.4rem;
+            transition: all 0.3s;
         }
 
         .btn-mic {
             background: linear-gradient(135deg, var(--accent), var(--accent2));
             color: white;
-            box-shadow: 0 4px 20px var(--glow);
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
         }
 
-        .btn-mic:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 30px var(--glow);
+        .btn-mic:hover { transform: scale(1.1); }
+        .btn-mic.active { animation: micPulse 1.5s infinite; }
+
+        @keyframes micPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4); }
+            50% { box-shadow: 0 0 0 16px rgba(0, 212, 255, 0); }
         }
 
-        .btn-mic.active {
-            animation: mic-pulse 1.5s infinite;
-        }
-
-        @keyframes mic-pulse {
-            0%, 100% { box-shadow: 0 0 0 0 var(--glow); }
-            50% { box-shadow: 0 0 0 20px rgba(0, 212, 255, 0); }
-        }
-
-        .btn-secondary {
-            background: rgba(30, 35, 60, 0.8);
-            border: 1px solid rgba(0, 212, 255, 0.3);
+        .btn-sec {
+            background: rgba(15, 20, 40, 0.8);
+            border: 1px solid rgba(0, 212, 255, 0.2);
             color: var(--accent);
         }
 
-        .btn-secondary:hover {
-            background: rgba(0, 212, 255, 0.1);
-            border-color: var(--accent);
-        }
+        .btn-sec:hover { background: rgba(0, 212, 255, 0.1); }
 
-        /* Mode Indicator */
-        .mode-indicator {
+        .mode-tag {
             position: fixed;
-            top: 20px;
+            top: 16px;
             left: 50%;
             transform: translateX(-50%);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            background: rgba(10, 15, 30, 0.9);
-            border: 1px solid rgba(0, 212, 255, 0.2);
-            border-radius: 20px;
-            font-size: 0.8rem;
+            font-family: 'Orbitron', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 3px;
+            color: #4a5a8a;
             z-index: 10;
         }
 
         .mode-dot {
-            width: 8px;
-            height: 8px;
+            display: inline-block;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            background: #00ff88;
-            box-shadow: 0 0 8px #00ff88;
-        }
-
-        .mode-dot.inactive {
-            background: #666;
-            box-shadow: none;
-        }
-
-        /* Settings Panel */
-        .settings-panel {
-            position: fixed;
-            right: -400px;
-            top: 0;
-            bottom: 0;
-            width: 380px;
-            background: rgba(10, 15, 30, 0.95);
-            border-left: 1px solid rgba(0, 212, 255, 0.2);
-            padding: 24px;
-            transition: right 0.3s ease;
-            z-index: 100;
-            overflow-y: auto;
-        }
-
-        .settings-panel.open {
-            right: 0;
-        }
-
-        .settings-title {
-            font-family: 'Orbitron', monospace;
-            font-size: 1rem;
-            color: var(--accent);
-            margin-bottom: 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .settings-group {
-            margin-bottom: 24px;
-        }
-
-        .settings-label {
-            font-size: 0.85rem;
-            color: #6b7db3;
-            margin-bottom: 8px;
-        }
-
-        .settings-value {
-            font-size: 0.9rem;
-            padding: 10px 14px;
-            background: rgba(20, 25, 50, 0.8);
-            border: 1px solid rgba(0, 212, 255, 0.2);
-            border-radius: 10px;
-        }
-
-        .settings-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .toggle-switch {
-            width: 44px;
-            height: 24px;
             background: #333;
-            border-radius: 12px;
-            position: relative;
-            cursor: pointer;
+            margin-right: 6px;
+            vertical-align: middle;
             transition: all 0.3s;
         }
 
-        .toggle-switch.active {
+        .mode-dot.active {
             background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
         }
 
-        .toggle-switch::after {
-            content: '';
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background: white;
-            border-radius: 50%;
-            top: 2px;
-            left: 2px;
-            transition: all 0.3s;
-        }
-
-        .toggle-switch.active::after {
-            left: 22px;
-        }
-
-        /* Notification */
-        .notification {
-            position: fixed;
-            top: 70px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 12px 24px;
-            background: rgba(10, 15, 30, 0.95);
-            border: 1px solid var(--accent);
-            border-radius: 12px;
-            font-size: 0.9rem;
-            z-index: 1000;
-            animation: slideDown 0.3s ease;
-            box-shadow: 0 4px 20px var(--glow);
-        }
-
-        @keyframes slideDown {
-            from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
-            to { transform: translateX(-50%) translateY(0); opacity: 1; }
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.3); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.2); border-radius: 2px; }
     </style>
 </head>
 <body>
-    <!-- Background Particles -->
-    <canvas id="particles"></canvas>
+    <canvas id="fx"></canvas>
 
-    <!-- Mode Indicator -->
-    <div class="mode-indicator">
-        <div class="mode-dot" id="mode-dot"></div>
-        <span id="mode-text">等待唤醒</span>
+    <div class="mode-tag">
+        <span class="mode-dot" id="mode-dot"></span>
+        <span id="mode-text">STANDBY</span>
     </div>
 
-    <!-- Main Container -->
-    <div class="container">
-        <!-- Orb -->
-        <div class="orb-container">
-            <div class="orb-ring"></div>
-            <div class="orb-ring"></div>
-            <div class="orb" id="orb">
-                <span class="orb-icon">🤖</span>
+    <div class="hud">
+        <div class="orb-wrap">
+            <canvas id="orb-canvas" width="440" height="440"></canvas>
+        </div>
+
+        <div class="status-bar" id="status">等待唤醒</div>
+        <div class="subtitle" id="subtitle">按 Ctrl+Space 或说 "丞相" 激活</div>
+
+        <div class="waveform" id="waveform"></div>
+
+        <div class="transcript-box" id="transcript">
+            <div class="entry">
+                <div class="entry-label">CHENGXIANG</div>
+                <div class="entry-text ai">主公，丞相在此，随时听候差遣。</div>
             </div>
-        </div>
-
-        <!-- Waveform -->
-        <div class="waveform" id="waveform">
-            <!-- Generated by JS -->
-        </div>
-
-        <!-- Status -->
-        <div class="status" id="status">说 "丞相" 唤醒我</div>
-        <div class="subtitle" id="subtitle">或按住麦克风按钮说话</div>
-
-        <!-- Transcript -->
-        <div class="transcript-container" id="transcript">
-            <div class="transcript-entry">
-                <div class="transcript-label">丞相</div>
-                <div class="transcript-text ai">主公，丞相在此，随时听候差遣。</div>
-            </div>
-        </div>
-
-        <!-- Controls -->
-        <div class="controls">
-            <button class="btn btn-secondary" onclick="toggleSettings()" title="设置">⚙️</button>
-            <button class="btn btn-mic" id="btn-mic" onclick="toggleListening()" title="按住说话">🎤</button>
-            <button class="btn btn-secondary" onclick="clearTranscript()" title="清空">🗑️</button>
         </div>
     </div>
 
-    <!-- Settings Panel -->
-    <div class="settings-panel" id="settings-panel">
-        <div class="settings-title">
-            设置
-            <button class="btn btn-secondary" style="width:32px;height:32px;font-size:1rem;" onclick="toggleSettings()">✕</button>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-toggle">
-                <span>语音唤醒</span>
-                <div class="toggle-switch active" id="toggle-wake" onclick="toggleWakeWord()"></div>
-            </div>
-            <div class="settings-toggle">
-                <span>连续对话</span>
-                <div class="toggle-switch active" id="toggle-continuous" onclick="toggleContinuous()"></div>
-            </div>
-            <div class="settings-toggle">
-                <span>语音回复</span>
-                <div class="toggle-switch active" id="toggle-tts" onclick="toggleTTS()"></div>
-            </div>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-label">AI 模型</div>
-            <div class="settings-value">MiMo-v2.5-pro</div>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-label">语音声音</div>
-            <div class="settings-value">YunxiNeural（儒雅男声）</div>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-label">唤醒词</div>
-            <div class="settings-value">丞相</div>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-label">快捷键</div>
-            <div class="settings-value">Ctrl+Space 唤醒 · Esc 退出</div>
-        </div>
+    <div class="controls">
+        <button class="btn btn-sec" id="btn-settings" title="设置">⚙</button>
+        <button class="btn btn-mic" id="btn-mic" title="按住说话">🎤</button>
+        <button class="btn btn-sec" id="btn-clear" title="清空">🗑</button>
     </div>
 
     <script>
-        // ========== Particles Background ==========
-        const canvas = document.getElementById('particles');
-        const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+    // ============================================================
+    //  PARTICLE SYSTEM
+    // ============================================================
+    const fxCanvas = document.getElementById('fx');
+    const fxCtx = fxCanvas.getContext('2d');
+    let W, H;
 
-        const particles = [];
-        for (let i = 0; i < 60; i++) {
-            particles.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                size: Math.random() * 2 + 0.5,
-                speedX: (Math.random() - 0.5) * 0.3,
-                speedY: (Math.random() - 0.5) * 0.3,
-                opacity: Math.random() * 0.4 + 0.1
-            });
+    function resizeFx() {
+        W = fxCanvas.width = window.innerWidth;
+        H = fxCanvas.height = window.innerHeight;
+    }
+    resizeFx();
+    window.addEventListener('resize', resizeFx);
+
+    const PARTICLE_COUNT = 80;
+    const CONNECT_DIST = 130;
+
+    class Particle {
+        constructor() {
+            this.reset();
         }
+        reset() {
+            this.x = Math.random() * W;
+            this.y = Math.random() * H;
+            this.vx = (Math.random() - 0.5) * 0.3;
+            this.vy = (Math.random() - 0.5) * 0.3;
+            this.r = Math.random() * 1.5 + 0.5;
+            this.baseAlpha = Math.random() * 0.3 + 0.1;
+            this.alpha = this.baseAlpha;
+            this.pulse = Math.random() * Math.PI * 2;
+        }
+        update(audioLevel) {
+            this.pulse += 0.02;
+            const boost = 1 + audioLevel * 2;
+            this.x += this.vx * boost;
+            this.y += this.vy * boost;
+            this.alpha = this.baseAlpha + audioLevel * 0.3 + Math.sin(this.pulse) * 0.05;
+            if (this.x < 0 || this.x > W) this.vx *= -1;
+            if (this.y < 0 || this.y > H) this.vy *= -1;
+        }
+        draw(ctx, color) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+            ctx.fillStyle = color.replace('1)', `${this.alpha})`);
+            ctx.fill();
+        }
+    }
 
-        function animateParticles() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            particles.forEach(p => {
-                p.x += p.speedX;
-                p.y += p.speedY;
-                if (p.x < 0 || p.x > canvas.width) p.speedX *= -1;
-                if (p.y < 0 || p.y > canvas.height) p.speedY *= -1;
+    const particles = Array.from({ length: PARTICLE_COUNT }, () => new Particle());
 
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(0, 212, 255, ${p.opacity})`;
-                ctx.fill();
-            });
+    let particleColor = 'rgba(0, 212, 255, 1)';
 
-            // Draw connections
-            for (let i = 0; i < particles.length; i++) {
-                for (let j = i + 1; j < particles.length; j++) {
-                    const dx = particles[i].x - particles[j].x;
-                    const dy = particles[i].y - particles[j].y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 120) {
-                        ctx.beginPath();
-                        ctx.moveTo(particles[i].x, particles[i].y);
-                        ctx.lineTo(particles[j].x, particles[j].y);
-                        ctx.strokeStyle = `rgba(0, 212, 255, ${0.08 * (1 - dist / 120)})`;
-                        ctx.lineWidth = 0.5;
-                        ctx.stroke();
-                    }
+    function drawParticles(audioLevel) {
+        fxCtx.clearRect(0, 0, W, H);
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            p.update(audioLevel);
+            p.draw(fxCtx, particleColor);
+            for (let j = i + 1; j < particles.length; j++) {
+                const q = particles[j];
+                const dx = p.x - q.x;
+                const dy = p.y - q.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < CONNECT_DIST) {
+                    const a = (1 - dist / CONNECT_DIST) * 0.12 * (1 + audioLevel);
+                    fxCtx.beginPath();
+                    fxCtx.moveTo(p.x, p.y);
+                    fxCtx.lineTo(q.x, q.y);
+                    fxCtx.strokeStyle = particleColor.replace('1)', `${a})`);
+                    fxCtx.lineWidth = 0.5;
+                    fxCtx.stroke();
                 }
             }
-
-            requestAnimationFrame(animateParticles);
         }
-        animateParticles();
+    }
 
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+    // ============================================================
+    //  ORB RENDERER
+    // ============================================================
+    const orbCanvas = document.getElementById('orb-canvas');
+    const orbCtx = orbCanvas.getContext('2d');
+    const OW = 440, OH = 440, OCX = OW / 2, OCY = OH / 2;
+
+    let orbState = 'idle';
+    let orbGlow = 0;
+    let orbPhase = 0;
+
+    const ORB_COLORS = {
+        idle:     { inner: '#00d4ff', outer: '#7b2fff', glow: 'rgba(0,212,255,0.3)' },
+        listening:{ inner: '#00e5ff', outer: '#536dfe', glow: 'rgba(0,229,255,0.5)' },
+        thinking:{ inner: '#ffab40', outer: '#ff6d00', glow: 'rgba(255,171,64,0.4)' },
+        speaking:{ inner: '#00e676', outer: '#00c853', glow: 'rgba(0,230,118,0.5)' },
+    };
+
+    function drawOrb(audioLevel) {
+        orbCtx.clearRect(0, 0, OW, OH);
+        orbPhase += 0.015;
+
+        const c = ORB_COLORS[orbState] || ORB_COLORS.idle;
+        const breathe = 1 + Math.sin(orbPhase) * 0.04 + audioLevel * 0.08;
+        const r = 70 * breathe;
+
+        // outer glow
+        const grad3 = orbCtx.createRadialGradient(OCX, OCY, r * 0.5, OCX, OCY, r * 2.5);
+        grad3.addColorStop(0, c.glow);
+        grad3.addColorStop(1, 'transparent');
+        orbCtx.fillStyle = grad3;
+        orbCtx.fillRect(0, 0, OW, OH);
+
+        // rings
+        for (let i = 0; i < 3; i++) {
+            const ringR = r + 20 + i * 22;
+            const ringAlpha = 0.15 - i * 0.04 + audioLevel * 0.1;
+            const rot = orbPhase * (i % 2 === 0 ? 0.5 : -0.3) + i * 1.2;
+            orbCtx.save();
+            orbCtx.translate(OCX, OCY);
+            orbCtx.rotate(rot);
+            orbCtx.beginPath();
+            orbCtx.ellipse(0, 0, ringR, ringR * 0.35, 0, 0, Math.PI * 2);
+            orbCtx.strokeStyle = c.inner.replace(')', `,${ringAlpha})`).replace('rgb', 'rgba');
+            orbCtx.lineWidth = 1.2;
+            orbCtx.stroke();
+            orbCtx.restore();
+        }
+
+        // main orb
+        const grad = orbCtx.createRadialGradient(OCX - r * 0.25, OCY - r * 0.25, r * 0.1, OCX, OCY, r);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.3, c.inner);
+        grad.addColorStop(1, c.outer);
+        orbCtx.beginPath();
+        orbCtx.arc(OCX, OCY, r, 0, Math.PI * 2);
+        orbCtx.fillStyle = grad;
+        orbCtx.fill();
+
+        // inner highlight
+        const grad2 = orbCtx.createRadialGradient(OCX - r * 0.3, OCY - r * 0.3, 0, OCX, OCY, r * 0.6);
+        grad2.addColorStop(0, 'rgba(255,255,255,0.25)');
+        grad2.addColorStop(1, 'transparent');
+        orbCtx.beginPath();
+        orbCtx.arc(OCX, OCY, r * 0.6, 0, Math.PI * 2);
+        orbCtx.fillStyle = grad2;
+        orbCtx.fill();
+
+        // audio reactive spikes
+        if (audioLevel > 0.05) {
+            const spikeCount = 12;
+            for (let i = 0; i < spikeCount; i++) {
+                const angle = (Math.PI * 2 / spikeCount) * i + orbPhase;
+                const spikeLen = audioLevel * 30 + 5;
+                const sx = OCX + Math.cos(angle) * r;
+                const sy = OCY + Math.sin(angle) * r;
+                const ex = OCX + Math.cos(angle) * (r + spikeLen);
+                const ey = OCY + Math.sin(angle) * (r + spikeLen);
+                orbCtx.beginPath();
+                orbCtx.moveTo(sx, sy);
+                orbCtx.lineTo(ex, ey);
+                orbCtx.strokeStyle = c.inner.replace(')', `,${0.4 + audioLevel * 0.4})`).replace('rgb', 'rgba');
+                orbCtx.lineWidth = 1.5;
+                orbCtx.stroke();
+            }
+        }
+    }
+
+    // ============================================================
+    //  WAVEFORM
+    // ============================================================
+    const waveformEl = document.getElementById('waveform');
+    const BAR_COUNT = 40;
+    for (let i = 0; i < BAR_COUNT; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'wave-bar';
+        waveformEl.appendChild(bar);
+    }
+    const waveBars = waveformEl.querySelectorAll('.wave-bar');
+
+    function updateWaveform(audioLevel, active) {
+        waveBars.forEach((bar, i) => {
+            if (active) {
+                const h = 3 + audioLevel * 50 * (0.5 + Math.sin(Date.now() * 0.005 + i * 0.4) * 0.5);
+                bar.style.height = h + 'px';
+                bar.style.background = orbState === 'speaking'
+                    ? `linear-gradient(to top, #00e676, #00c853)`
+                    : `linear-gradient(to top, #00d4ff, #7b2fff)`;
+            } else {
+                bar.style.height = '3px';
+            }
         });
+    }
 
-        // ========== Waveform ==========
-        const waveform = document.getElementById('waveform');
-        const barCount = 30;
-        for (let i = 0; i < barCount; i++) {
-            const bar = document.createElement('div');
-            bar.className = 'wave-bar';
-            waveform.appendChild(bar);
+    // ============================================================
+    //  AUDIO ANALYSIS
+    // ============================================================
+    let audioCtx = null;
+    let analyser = null;
+    let audioDataArray = null;
+    let currentAudioEl = null;
+
+    function initAudioContext() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+    }
+
+    function getAudioLevel() {
+        if (!analyser || !audioDataArray) return 0;
+        analyser.getByteFrequencyData(audioDataArray);
+        let sum = 0;
+        for (let i = 0; i < audioDataArray.length; i++) sum += audioDataArray[i];
+        return sum / audioDataArray.length / 255;
+    }
+
+    function connectAudioElement(audioEl) {
+        initAudioContext();
+        if (currentAudioEl) {
+            try { currentAudioEl.disconnect(); } catch(e) {}
         }
-        const waveBars = document.querySelectorAll('.wave-bar');
+        const source = audioCtx.createMediaElementSource(audioEl);
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        currentAudioEl = source;
+    }
 
-        function animateWaveform(active) {
-            waveBars.forEach(bar => {
-                if (active) {
-                    bar.style.height = (Math.random() * 60 + 4) + 'px';
-                } else {
-                    bar.style.height = '4px';
+    // ============================================================
+    //  STATE
+    // ============================================================
+    const state = {
+        listening: false,
+        speaking: false,
+        continuous: true,
+        ttsEnabled: true,
+    };
+
+    const statusEl = document.getElementById('status');
+    const subtitleEl = document.getElementById('subtitle');
+    const transcriptEl = document.getElementById('transcript');
+    const modeDot = document.getElementById('mode-dot');
+    const modeText = document.getElementById('mode-text');
+
+    function updateUI() {
+        if (state.speaking) {
+            orbState = 'speaking';
+            particleColor = 'rgba(0, 230, 118, 1)';
+            statusEl.textContent = '丞相朗读中';
+            statusEl.className = 'status-bar speaking';
+            modeText.textContent = 'SPEAKING';
+        } else if (state.listening) {
+            orbState = 'listening';
+            particleColor = 'rgba(0, 212, 255, 1)';
+            statusEl.textContent = '聆听中...';
+            statusEl.className = 'status-bar';
+            modeText.textContent = 'LISTENING';
+        } else {
+            orbState = 'idle';
+            particleColor = 'rgba(0, 212, 255, 1)';
+            statusEl.textContent = '等待唤醒';
+            statusEl.className = 'status-bar';
+            modeText.textContent = 'STANDBY';
+        }
+        modeDot.className = 'mode-dot' + (state.listening || state.speaking ? ' active' : '');
+    }
+
+    // ============================================================
+    //  RENDER LOOP
+    // ============================================================
+    function render() {
+        const audioLevel = getAudioLevel();
+        drawParticles(audioLevel);
+        drawOrb(audioLevel);
+        updateWaveform(audioLevel, state.listening || state.speaking);
+        requestAnimationFrame(render);
+    }
+    render();
+
+    // ============================================================
+    //  WEBSOCKET
+    // ============================================================
+    let ws;
+    let isConnected = false;
+    let currentTranscript = '';
+
+    function connect() {
+        ws = new WebSocket(`ws://${window.location.host}`);
+        ws.onopen = () => {
+            isConnected = true;
+            console.log('Connected');
+        };
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.type === 'response_start') {
+                state.speaking = true;
+                currentTranscript = '';
+                updateUI();
+            } else if (data.type === 'response_chunk') {
+                currentTranscript += data.text;
+                updateLastAIEntry(currentTranscript);
+            } else if (data.type === 'response_end') {
+                state.speaking = false;
+                updateUI();
+                if (data.fullText && state.ttsEnabled) {
+                    speak(data.fullText);
+                } else if (state.continuous) {
+                    setTimeout(() => startListening(), 500);
                 }
-            });
-        }
+            }
+        };
+        ws.onclose = () => { isConnected = false; setTimeout(connect, 2000); };
+        ws.onerror = () => { isConnected = false; };
+    }
+    connect();
 
-        // ========== State Management ==========
-        let state = {
-            listening: false,
-            speaking: false,
-            continuous: true,
-            ttsEnabled: true,
-            wakeWordEnabled: true
+    // ============================================================
+    //  SPEECH RECOGNITION
+    // ============================================================
+    let recognition = null;
+    let isRecognizing = false;
+    let silenceTimer = null;
+    let accumulatedText = '';
+    const SILENCE_DELAY = 2500;
+
+    function startListening() {
+        if (isRecognizing || state.speaking) return;
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) return;
+
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        accumulatedText = '';
+        if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SR();
+        recognition.lang = 'zh-CN';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 3;
+
+        recognition.onstart = () => {
+            isRecognizing = true;
+            state.listening = true;
+            updateUI();
         };
 
-        const orb = document.getElementById('orb');
-        const statusEl = document.getElementById('status');
-        const subtitleEl = document.getElementById('subtitle');
-        const transcriptEl = document.getElementById('transcript');
-        const modeDot = document.getElementById('mode-dot');
-        const modeText = document.getElementById('mode-text');
-
-        function updateUI() {
-            // Update orb
-            orb.className = 'orb';
-            if (state.listening) orb.classList.add('listening');
-            if (state.speaking) orb.classList.add('speaking');
-
-            // Update icon
-            orb.querySelector('.orb-icon').textContent = state.listening ? '👂' : state.speaking ? '🗣️' : '🤖';
-
-            // Update status
-            if (state.listening) {
-                statusEl.textContent = '正在听您说...';
-                statusEl.className = 'status';
-            } else if (state.speaking) {
-                statusEl.textContent = '正在回复...';
-                statusEl.className = 'status speaking';
-            } else {
-                statusEl.textContent = '说 "丞相" 唤醒我';
-                statusEl.className = 'status';
+        recognition.onresult = (e) => {
+            if (state.speaking) return;
+            let interim = '';
+            for (let i = e.resultIndex; i < e.results.length; i++) {
+                const t = e.results[i][0].transcript;
+                if (e.results[i].isFinal) accumulatedText += t;
+                else interim += t;
             }
+            subtitleEl.textContent = (accumulatedText + interim) ? `"${accumulatedText + interim}"` : '';
+            resetSilenceTimer();
+        };
 
-            // Update mode indicator
-            modeDot.className = 'mode-dot' + (state.listening || state.speaking ? '' : ' inactive');
-            modeText.textContent = state.listening ? '聆听中' : state.speaking ? '回复中' : '等待唤醒';
-
-            // Animate waveform
-            animateWaveform(state.listening || state.speaking);
-        }
-
-        // ========== WebSocket Connection ==========
-        let ws;
-        let currentTranscript = '';
-        let isConnected = false;
-        let messageQueue = [];
-
-        function connect() {
-            ws = new WebSocket(`ws://${window.location.host}`);
-            
-            ws.onopen = () => {
-                isConnected = true;
-                console.log('Connected to 丞相');
-                showNotification('✅ 已连接');
-                
-                // Send any queued messages
-                while (messageQueue.length > 0) {
-                    const msg = messageQueue.shift();
-                    ws.send(msg);
-                }
-            };
-
-            ws.onmessage = (e) => {
-                const data = JSON.parse(e.data);
-                
-                if (data.type === 'response_start') {
-                    state.speaking = true;
-                    currentTranscript = '';
-                    updateUI();
-                }
-                else if (data.type === 'response_chunk') {
-                    currentTranscript += data.text;
-                    updateLastAIEntry(currentTranscript);
-                }
-                else if (data.type === 'response_end') {
-                    state.speaking = false;
-                    updateUI();
-                    
-                    if (data.fullText && state.ttsEnabled) {
-                        speak(data.fullText);
-                    } else if (state.continuous) {
-                        setTimeout(() => startListening(), 500);
-                    }
-                }
-            };
-
-            ws.onclose = () => {
-                isConnected = false;
-                console.log('Disconnected from 丞相');
-                setTimeout(connect, 2000);
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                isConnected = false;
-            };
-        }
-        connect();
-
-        // ========== Speech Recognition ==========
-        let recognition = null;
-        let isRecognizing = false;
-        let recognitionTimeout = null;
-        let silenceTimer = null;
-        let accumulatedText = '';
-        const SILENCE_DELAY = 2500;
-
-        function toggleListening() {
-            if (isRecognizing) {
-                stopListening();
-            } else {
-                startListening();
+        recognition.onend = () => {
+            if (accumulatedText.trim()) {
+                addUserEntry(accumulatedText.trim());
+                sendMessage(accumulatedText.trim());
             }
-        }
-
-        function startListening() {
-            if (isRecognizing || state.speaking) return;
-            
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                showNotification('❌ 请使用Chrome浏览器');
-                return;
-            }
-
-            if (recognitionTimeout) {
-                clearTimeout(recognitionTimeout);
-                recognitionTimeout = null;
-            }
-            if (silenceTimer) {
-                clearTimeout(silenceTimer);
-                silenceTimer = null;
-            }
-
             accumulatedText = '';
-
-            if (recognition) {
-                try { recognition.abort(); } catch (e) {}
+            isRecognizing = false;
+            state.listening = false;
+            updateUI();
+            if (state.continuous && !state.speaking) {
+                setTimeout(() => { if (!state.speaking) startListening(); }, 800);
             }
+        };
 
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.lang = 'zh-CN';
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.maxAlternatives = 3;
-
-            recognition.onstart = () => {
-                isRecognizing = true;
-                state.listening = true;
-                updateUI();
-                console.log('🎤 开始监听');
-            };
-
-            recognition.onresult = (e) => {
-                if (state.speaking) return;
-
-                let interimTranscript = '';
-
-                for (let i = e.resultIndex; i < e.results.length; i++) {
-                    const transcript = e.results[i][0].transcript;
-                    if (e.results[i].isFinal) {
-                        accumulatedText += transcript;
-                    } else {
-                        interimTranscript += transcript;
-                    }
-                }
-
-                const display = accumulatedText + interimTranscript;
-                subtitleEl.textContent = display ? `"${display}"` : '';
-
-                resetSilenceTimer();
-            };
-
-            recognition.onend = () => {
-                console.log('🔇 监听结束，累积文本:', accumulatedText || '(无)');
-                
-                if (accumulatedText.trim()) {
-                    addUserEntry(accumulatedText.trim());
-                    sendMessage(accumulatedText.trim());
-                }
-
-                accumulatedText = '';
-                isRecognizing = false;
-                state.listening = false;
-                updateUI();
-
-                if (state.continuous && !state.speaking) {
-                    recognitionTimeout = setTimeout(() => {
-                        if (!state.speaking) startListening();
-                    }, 800);
-                }
-            };
-
-            recognition.onerror = (e) => {
-                console.log('❌ 识别错误:', e.error);
-                
-                if (e.error === 'no-speech') {
-                    return;
-                }
-
-                isRecognizing = false;
-                state.listening = false;
-                updateUI();
-                
-                if (e.error === 'aborted') return;
-                
-                if (state.continuous && !state.speaking) {
-                    recognitionTimeout = setTimeout(() => {
-                        if (!state.speaking) startListening();
-                    }, 3000);
-                }
-            };
-
-            try {
-                recognition.start();
-            } catch (e) {
-                console.log('启动识别失败:', e);
-                isRecognizing = false;
+        recognition.onerror = (e) => {
+            if (e.error === 'no-speech' || e.error === 'aborted') return;
+            isRecognizing = false;
+            state.listening = false;
+            updateUI();
+            if (state.continuous && !state.speaking) {
+                setTimeout(() => { if (!state.speaking) startListening(); }, 3000);
             }
-        }
+        };
 
-        function resetSilenceTimer() {
-            if (silenceTimer) clearTimeout(silenceTimer);
-            silenceTimer = setTimeout(() => {
-                if (accumulatedText.trim()) {
-                    console.log('⏳ 静默超时，发送累积文本');
-                    addUserEntry(accumulatedText.trim());
-                    sendMessage(accumulatedText.trim());
-                    accumulatedText = '';
-                    
-                    if (recognition) {
-                        try { recognition.stop(); } catch (e) {}
-                    }
-                }
-            }, SILENCE_DELAY);
-        }
+        try { recognition.start(); } catch(e) {}
+    }
 
-        function stopListening() {
-            if (recognitionTimeout) {
-                clearTimeout(recognitionTimeout);
-                recognitionTimeout = null;
-            }
-            if (silenceTimer) {
-                clearTimeout(silenceTimer);
-                silenceTimer = null;
-            }
-            
+    function resetSilenceTimer() {
+        if (silenceTimer) clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
             if (accumulatedText.trim()) {
                 addUserEntry(accumulatedText.trim());
                 sendMessage(accumulatedText.trim());
                 accumulatedText = '';
+                if (recognition) { try { recognition.stop(); } catch(e) {} }
             }
+        }, SILENCE_DELAY);
+    }
 
-            if (recognition) {
-                try { recognition.stop(); } catch (e) {}
-            }
-            
-            isRecognizing = false;
-            state.listening = false;
-            updateUI();
+    function stopListening() {
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        if (accumulatedText.trim()) {
+            addUserEntry(accumulatedText.trim());
+            sendMessage(accumulatedText.trim());
+            accumulatedText = '';
         }
-        function sendMessage(text) {
-            if (!text.trim()) return;
-            
-            subtitleEl.textContent = '';
-            
-            const message = JSON.stringify({ type: 'chat', text: text });
-            
-            if (isConnected && ws.readyState === WebSocket.OPEN) {
-                ws.send(message);
-            } else {
-                console.log('Message queued (not connected)');
-                messageQueue.push(message);
-                showNotification('⏳ 等待连接...');
-            }
+        if (recognition) { try { recognition.stop(); } catch(e) {} }
+        isRecognizing = false;
+        state.listening = false;
+        updateUI();
+    }
+
+    // ============================================================
+    //  TTS (edge-tts server-side)
+    // ============================================================
+    function speak(text) {
+        if (!state.ttsEnabled) {
+            if (state.continuous) setTimeout(() => startListening(), 500);
+            return;
         }
+        stopListening();
+        state.speaking = true;
+        updateUI();
 
-        function addUserEntry(text) {
-            const entry = document.createElement('div');
-            entry.className = 'transcript-entry';
-            entry.innerHTML = `
-                <div class="transcript-label">您</div>
-                <div class="transcript-text user">${text}</div>
-            `;
-            transcriptEl.appendChild(entry);
-            transcriptEl.scrollTop = transcriptEl.scrollHeight;
-        }
+        initAudioContext();
 
-        function addAIEntry(text) {
-            const entry = document.createElement('div');
-            entry.className = 'transcript-entry';
-            entry.innerHTML = `
-                <div class="transcript-label">丞相</div>
-                <div class="transcript-text ai">${text}</div>
-            `;
-            transcriptEl.appendChild(entry);
-            transcriptEl.scrollTop = transcriptEl.scrollHeight;
-        }
+        fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+        })
+        .then(r => r.blob())
+        .then(blob => {
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.crossOrigin = 'anonymous';
 
-        function updateLastAIEntry(text) {
-            let lastAI = transcriptEl.querySelector('.transcript-entry:last-child .transcript-text.ai');
-            if (!lastAI || lastAI.parentElement.querySelector('.transcript-label').textContent !== '丞相') {
-                addAIEntry(text);
-            } else {
-                lastAI.textContent = text;
-            }
-            transcriptEl.scrollTop = transcriptEl.scrollHeight;
-        }
-
-        function clearTranscript() {
-            transcriptEl.innerHTML = `
-                <div class="transcript-entry">
-                <div class="transcript-label">丞相</div>
-                <div class="transcript-text ai">对话已清空。有什么可以帮您的？</div>
-                </div>
-            `;
-        }
-
-        // ========== Text-to-Speech ==========
-        function speak(text) {
-            if (!state.ttsEnabled) {
-                if (state.continuous) setTimeout(() => startListening(), 500);
-                return;
-            }
-
-            stopListening();
-            state.speaking = true;
-            updateUI();
-
-            fetch('/api/tts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text })
-            })
-            .then(r => r.blob())
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
-
-                audio.onplay = () => console.log('🗣️ 丞相朗读中');
-                audio.onended = () => {
-                    state.speaking = false;
-                    updateUI();
-                    URL.revokeObjectURL(url);
-                    console.log('🔇 朗读结束');
-                    if (state.continuous) setTimeout(() => startListening(), 800);
-                };
-                audio.onerror = (e) => {
-                    console.error('TTS 播放失败:', e);
-                    state.speaking = false;
-                    updateUI();
-                    URL.revokeObjectURL(url);
-                    if (state.continuous) setTimeout(() => startListening(), 800);
-                };
-                audio.play().catch(e => {
-                    console.error('播放被阻止:', e);
-                    state.speaking = false;
-                    updateUI();
-                    URL.revokeObjectURL(url);
-                });
-            })
-            .catch(e => {
-                console.error('TTS 请求失败:', e);
+            audio.onplay = () => {
+                connectAudioElement(audio);
+                console.log('🗣️ 丞相朗读中');
+            };
+            audio.onended = () => {
                 state.speaking = false;
                 updateUI();
+                URL.revokeObjectURL(url);
                 if (state.continuous) setTimeout(() => startListening(), 800);
+            };
+            audio.onerror = () => {
+                state.speaking = false;
+                updateUI();
+                URL.revokeObjectURL(url);
+                if (state.continuous) setTimeout(() => startListening(), 800);
+            };
+            audio.play().catch(() => {
+                state.speaking = false;
+                updateUI();
+                URL.revokeObjectURL(url);
             });
-        }
-
-        // ========== Button Handlers ==========
-        function toggleListening() {
-            if (state.listening) {
-                stopListening();
-            } else {
-                startListening();
-            }
-        }
-
-        // Push-to-talk
-        const micBtn = document.getElementById('btn-mic');
-        micBtn.addEventListener('mousedown', () => {
-            if (!state.listening) startListening();
+        })
+        .catch(() => {
+            state.speaking = false;
+            updateUI();
+            if (state.continuous) setTimeout(() => startListening(), 800);
         });
-        micBtn.addEventListener('mouseup', () => {
-            // Keep listening in continuous mode
-        });
-        micBtn.addEventListener('touchstart', (e) => {
+    }
+
+    // ============================================================
+    //  TRANSCRIPT
+    // ============================================================
+    function sendMessage(text) {
+        if (!text.trim()) return;
+        subtitleEl.textContent = '';
+        const msg = JSON.stringify({ type: 'chat', text });
+        if (isConnected && ws.readyState === WebSocket.OPEN) ws.send(msg);
+    }
+
+    function addUserEntry(text) {
+        const el = document.createElement('div');
+        el.className = 'entry';
+        el.innerHTML = `<div class="entry-label">YOU</div><div class="entry-text user">${text}</div>`;
+        transcriptEl.appendChild(el);
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    }
+
+    function updateLastAIEntry(text) {
+        let last = transcriptEl.querySelector('.entry:last-child .entry-text.ai');
+        if (!last || last.parentElement.querySelector('.entry-label').textContent !== 'CHENGXIANG') {
+            const el = document.createElement('div');
+            el.className = 'entry';
+            el.innerHTML = `<div class="entry-label">CHENGXIANG</div><div class="entry-text ai">${text}</div>`;
+            transcriptEl.appendChild(el);
+        } else {
+            last.textContent = text;
+        }
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    }
+
+    // ============================================================
+    //  CONTROLS
+    // ============================================================
+    document.getElementById('btn-mic').addEventListener('click', () => {
+        if (isRecognizing) stopListening(); else startListening();
+    });
+    document.getElementById('btn-mic').addEventListener('mousedown', () => {
+        if (!isRecognizing) startListening();
+    });
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        transcriptEl.innerHTML = '<div class="entry"><div class="entry-label">CHENGXIANG</div><div class="entry-text ai">对话已清空。主公有何吩咐？</div></div>';
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.code === 'Space') {
             e.preventDefault();
-            if (!state.listening) startListening();
-        });
-
-        // ========== Hotkeys ==========
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.code === 'Space') {
-                e.preventDefault();
-                if (state.listening) {
-                    stopListening();
-                } else {
-                    startListening();
-                }
-            }
-            if (e.code === 'Escape') {
-                stopListening();
-            }
-        });
-
-        // ========== Settings ==========
-        function toggleSettings() {
-            document.getElementById('settings-panel').classList.toggle('open');
+            if (isRecognizing) stopListening(); else startListening();
         }
+        if (e.code === 'Escape') stopListening();
+    });
 
-        function toggleWakeWord() {
-            state.wakeWordEnabled = !state.wakeWordEnabled;
-            document.getElementById('toggle-wake').classList.toggle('active');
-        }
-
-        function toggleContinuous() {
-            state.continuous = !state.continuous;
-            document.getElementById('toggle-continuous').classList.toggle('active');
-        }
-
-        function toggleTTS() {
-            state.ttsEnabled = !state.ttsEnabled;
-            document.getElementById('toggle-tts').classList.toggle('active');
-        }
-
-        // ========== Notifications ==========
-        function showNotification(text) {
-            const notif = document.createElement('div');
-            notif.className = 'notification';
-            notif.textContent = text;
-            document.body.appendChild(notif);
-            setTimeout(() => notif.remove(), 2000);
-        }
-
-        // ========== Initialize ==========
-        updateUI();
-        
-        // Auto-start listening after a delay
-        setTimeout(() => {
-            showNotification('🎤 说 "丞相" 唤醒');
-        }, 1000);
+    // ============================================================
+    //  INIT
+    // ============================================================
+    updateUI();
     </script>
 </body>
 </html>

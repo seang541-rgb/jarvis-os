@@ -1,18 +1,18 @@
-const { Porcupine, BuiltinKeyword } = require('@picovoice/porcupine-node');
+const { Porcupine } = require('@picovoice/porcupine-node');
 const { PvRecorder } = require('@picovoice/pvrecorder-node');
 const WebSocket = require('ws');
 const { exec } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 // Porcupine Access Key (免费注册获取)
 // https://console.picovoice.ai/
 const ACCESS_KEY = process.env.PORCUPINE_KEY || '';
 
-// Wake word configuration
-const WAKE_WORDS = [
-    BuiltinKeyword.JARVIS,  // Built-in "Jarvis" wake word
-];
+// Custom wake word - 在 https://console.picovoice.ai/ 创建 "Mimo" 唤醒词并下载 .ppn 文件
+const CUSTOM_KEYWORD_PATH = process.env.MIMO_WAKEWORD_PATH || path.join(__dirname, 'mimo_wake_word.ppn');
 
-const JARVIS_SERVER = 'ws://localhost:3000';
+const MIMO_SERVER = 'ws://localhost:3000';
 
 class WakeWordDetector {
     constructor() {
@@ -23,7 +23,7 @@ class WakeWordDetector {
     }
 
     async start() {
-        console.log('🎤 JARVIS Wake Word Detector');
+        console.log('🎤 Mimo Wake Word Detector');
         console.log('============================');
         
         if (!ACCESS_KEY) {
@@ -31,31 +31,38 @@ class WakeWordDetector {
             console.log('请访问 https://console.picovoice.ai/ 免费获取');
             console.log('然后设置环境变量: set PORCUPINE_KEY=your_key\n');
             
-            // Fallback to simple hotkey detection
+            console.log('🔄 使用热键模式 (Ctrl+Space) ...\n');
+            this.startHotkeyMode();
+            return;
+        }
+
+        if (!fs.existsSync(CUSTOM_KEYWORD_PATH)) {
+            console.log('\n⚠️  唤醒词文件不存在: ' + CUSTOM_KEYWORD_PATH);
+            console.log('请到 https://console.picovoice.ai/ 创建 "Mimo" 唤醒词');
+            console.log('下载 .ppn 文件并放到项目目录，命名为 mimo_wake_word.ppn\n');
+            
             console.log('🔄 使用热键模式 (Ctrl+Space) ...\n');
             this.startHotkeyMode();
             return;
         }
 
         try {
-            // Initialize Porcupine
             this.porcupine = new Porcupine(
                 ACCESS_KEY,
-                WAKE_WORDS,
-                [0.5] // Sensitivity
+                [CUSTOM_KEYWORD_PATH],
+                [0.5]
             );
 
-            console.log(`✅ 唤醒词: "Jarvis"`);
+            console.log(`✅ 唤醒词: "Mimo"`);
             console.log(`✅ 灵敏度: 0.5`);
             console.log(`✅ 采样率: ${this.porcupine.sampleRate}`);
             console.log(`✅ 帧长度: ${this.porcupine.frameLength}`);
 
-            // Initialize recorder
             this.recorder = new PvRecorder(this.porcupine.frameLength);
             await this.recorder.start();
 
             console.log('\n🎧 正在监听唤醒词...');
-            console.log('说 "Jarvis" 唤醒 JARVIS\n');
+            console.log('说 "Mimo" 唤醒助手\n');
 
             this.isListening = true;
             this.processAudio();
@@ -74,7 +81,7 @@ class WakeWordDetector {
                 const keywordIndex = this.porcupine.process(pcm);
 
                 if (keywordIndex >= 0) {
-                    console.log('🎯 检测到唤醒词 "Jarvis"!');
+                    console.log('🎯 检测到唤醒词 "Mimo"!');
                     this.onWakeWordDetected();
                 }
             } catch (error) {
@@ -88,17 +95,17 @@ class WakeWordDetector {
         // Play activation sound
         this.playSound('activate');
         
-        // Activate JARVIS
-        this.activateJarvis();
+        // Activate Mimo
+        this.activateMimo();
     }
 
-    activateJarvis() {
-        // Send activation signal to JARVIS server
+    activateMimo() {
+        // Send activation signal to Mimo server
         try {
-            const ws = new WebSocket(JARVIS_SERVER);
+            const ws = new WebSocket(MIMO_SERVER);
             
             ws.on('open', () => {
-                console.log('✅ 已连接到 JARVIS 服务器');
+                console.log('✅ 已连接到 Mimo 服务器');
                 
                 // Send activation signal
                 ws.send(JSON.stringify({
@@ -122,7 +129,7 @@ class WakeWordDetector {
 
             ws.on('message', (data) => {
                 const message = JSON.parse(data.toString());
-                console.log(`JARVIS: ${message.text || ''}`);
+                console.log(`Mimo: ${message.text || ''}`);
             });
 
             ws.on('error', (error) => {
@@ -142,8 +149,8 @@ class WakeWordDetector {
     }
 
     startHotkeyMode() {
-        console.log('热键模式已启动');
-        console.log('在浏览器中按 Ctrl+Space 激活 JARVIS\n');
+            console.log('热键模式已启动');
+            console.log('在浏览器中按 Ctrl+Space 激活 Mimo\n');
         
         // Keep process running
         setInterval(() => {}, 1000);

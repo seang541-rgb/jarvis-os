@@ -1,4 +1,4 @@
-# JARVIS 唤醒功能使用指南
+# Mimo 唤醒功能使用指南
 
 ## 快速开始
 
@@ -6,19 +6,21 @@
 
 1. 双击 `start-jarvis.bat` 启动
 2. 在浏览器中打开 http://localhost:3000
-3. 按 `Ctrl+Space` 激活 JARVIS
+3. 按 `Ctrl+Space` 激活 Mimo
 4. 说出指令
 
 ### 方式2：语音唤醒（推荐）
 
 1. 注册 Picovoice 账号：https://console.picovoice.ai/
 2. 获取免费 Access Key
-3. 设置环境变量：
+3. 在控制台创建自定义唤醒词 "Mimo"，下载 `.ppn` 文件
+4. 将文件命名为 `mimo_wake_word.ppn` 放到项目根目录
+5. 设置环境变量：
    ```cmd
    set PORCUPINE_KEY=your_access_key
    ```
-4. 双击 `start-jarvis.bat` 启动
-5. 说 "Jarvis" 唤醒
+6. 双击 `start-jarvis.bat` 启动
+7. 说 "Mimo" 唤醒
 
 ---
 
@@ -26,8 +28,8 @@
 
 | 唤醒词 | 说明 |
 |--------|------|
-| `Jarvis` | 默认唤醒词（英文） |
-| `Hey Jarvis` | 可自定义 |
+| `Mimo` | 自定义唤醒词 |
+| `Ctrl+Space` | 热键唤醒 |
 
 ---
 
@@ -35,48 +37,31 @@
 
 ### 场景1：电脑前工作
 ```
-你：Jarvis
-JARVIS：[激活动画] 请说...
+你：Mimo
+Mimo：[激活动画] 请说...
 你：打开Chrome浏览器
-JARVIS：已打开 Chrome
+Mimo：已打开 Chrome
 ```
 
 ### 场景2：控制智能家居
 ```
 你：Ctrl+Space
-JARVIS：[激活]
+Mimo：[激活]
 你：打开客厅灯
-JARVIS：已打开 客厅灯
+Mimo：已打开 客厅灯
 ```
 
 ### 场景3：查天气
 ```
-你：Jarvis
-JARVIS：[激活]
+你：Mimo
+Mimo：[激活]
 你：今天天气怎么样
-JARVIS：先生，今天晴，25°C，适合外出。
+Mimo：先生，今天晴，25°C，适合外出。
 ```
 
 ---
 
 ## 高级配置
-
-### 自定义唤醒词
-
-1. 访问 https://console.picovoice.ai/
-2. 创建自定义唤醒词
-3. 下载 `.ppn` 文件
-4. 修改 `wake-word.js`：
-
-```javascript
-const CUSTOM_KEYWORD = './path/to/your-wake-word.ppn';
-
-this.porcupine = new Porcupine(
-    ACCESS_KEY,
-    [CUSTOM_KEYWORD],
-    [0.5]
-);
-```
 
 ### 调整灵敏度
 
@@ -91,11 +76,12 @@ this.porcupine = new Porcupine(
 
 ## 故障排除
 
-### Q: 说 "Jarvis" 没反应？
+### Q: 说 "Mimo" 没反应？
 A: 
 1. 检查 Access Key 是否正确
 2. 检查麦克风权限
-3. 尝试提高灵敏度
+3. 确认已下载并放置 `mimo_wake_word.ppn` 文件
+4. 尝试提高灵敏度
 
 ### Q: 热键不工作？
 A: 
@@ -125,7 +111,7 @@ A:
 │                            │            │
 │                            ▼            │
 │  ┌─────────────┐    ┌─────────────┐    │
-│  │   JARVIS    │◀───│  WebSocket  │    │
+│  │    Mimo     │◀───│  WebSocket  │    │
 │  │   服务器     │    │   连接      │    │
 │  └─────────────┘    └─────────────┘    │
 │                                         │
@@ -143,4 +129,4 @@ A:
 ## 获取帮助
 
 - Picovoice 文档：https://picovoice.ai/docs/
-- JARVIS 问题反馈：创建 GitHub Issue
+- Mimo 问题反馈：创建 GitHub Issue

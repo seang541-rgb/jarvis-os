@@ -461,8 +461,8 @@ app.get('/api/ha/device/:entity_id', async (req, res) => {
 });
 
 // System prompt with smart home context
-const SYSTEM_PROMPT = `你是JARVIS，一个智能AI助手。你的特点是：
-- 说话简洁、专业、像钢铁侠的JARVIS
+const SYSTEM_PROMPT = `你是Mimo，一个智能AI助手。你的特点是：
+- 说话简洁、专业
 - 用中文回复
 - 称呼用户为"先生"或"Boss"
 - 回复控制在50字以内，适合语音播报
@@ -1084,5 +1084,5 @@ async function streamMiMoAPI(messages, ws, sessionId) {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`JARVIS server running on http://localhost:${PORT}`);
+    console.log(`Mimo server running on http://localhost:${PORT}`);
 });

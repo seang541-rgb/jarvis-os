@@ -18,7 +18,7 @@ ws.on('open', () => {
 
 ws.on('message', (data) => {
     const message = JSON.parse(data.toString());
-    console.log(`\nJARVIS: ${message.text}`);
+    console.log(`\nMimo: ${message.text}`);
     
     // Send another message after receiving response
     if (message.type === 'response') {

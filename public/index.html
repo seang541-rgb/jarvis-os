@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS - AI Voice Assistant</title>
+    <title>Mimo - AI Voice Assistant</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 
@@ -420,13 +420,13 @@
         </div>
 
         <!-- Status -->
-        <div class="status" id="status">说 "Jarvis" 唤醒我</div>
+        <div class="status" id="status">说 "Mimo" 唤醒我</div>
         <div class="subtitle" id="subtitle">或按住麦克风按钮说话</div>
 
         <!-- Transcript -->
         <div class="transcript-container" id="transcript">
             <div class="transcript-entry">
-                <div class="transcript-label">JARVIS</div>
+                <div class="transcript-label">Mimo</div>
                 <div class="transcript-text ai">晚上好，先生。随时准备为您服务。</div>
             </div>
         </div>
@@ -468,7 +468,7 @@
 
         <div class="settings-group">
             <div class="settings-label">唤醒词</div>
-            <div class="settings-value">Jarvis</div>
+            <div class="settings-value">Mimo</div>
         </div>
 
         <div class="settings-group">
@@ -590,7 +590,7 @@
                 statusEl.textContent = '正在回复...';
                 statusEl.className = 'status speaking';
             } else {
-                statusEl.textContent = '说 "Jarvis" 唤醒我';
+                statusEl.textContent = '说 "Mimo" 唤醒我';
                 statusEl.className = 'status';
             }
 
@@ -613,7 +613,7 @@
             
             ws.onopen = () => {
                 isConnected = true;
-                console.log('Connected to JARVIS');
+                console.log('Connected to Mimo');
                 showNotification('✅ 已连接');
                 
                 // Send any queued messages
@@ -649,7 +649,7 @@
 
             ws.onclose = () => {
                 isConnected = false;
-                console.log('Disconnected from JARVIS');
+                console.log('Disconnected from Mimo');
                 setTimeout(connect, 2000);
             };
 
@@ -664,6 +664,9 @@
         let recognition = null;
         let isRecognizing = false;
         let recognitionTimeout = null;
+        let silenceTimer = null;
+        let accumulatedText = '';
+        const SILENCE_DELAY = 2500;
 
         function toggleListening() {
             if (isRecognizing) {
@@ -674,7 +677,7 @@
         }
 
         function startListening() {
-            if (isRecognizing) return;
+            if (isRecognizing || state.speaking) return;
             
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 showNotification('❌ 请使用Chrome浏览器');
@@ -685,6 +688,12 @@
                 clearTimeout(recognitionTimeout);
                 recognitionTimeout = null;
             }
+            if (silenceTimer) {
+                clearTimeout(silenceTimer);
+                silenceTimer = null;
+            }
+
+            accumulatedText = '';
 
             if (recognition) {
                 try { recognition.abort(); } catch (e) {}
@@ -693,9 +702,9 @@
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.lang = 'zh-CN';
-            recognition.continuous = false;
+            recognition.continuous = true;
             recognition.interimResults = true;
-            recognition.maxAlternatives = 1;
+            recognition.maxAlternatives = 3;
 
             recognition.onstart = () => {
                 isRecognizing = true;
@@ -705,33 +714,52 @@
             };
 
             recognition.onresult = (e) => {
-                const result = e.results[e.results.length - 1];
-                const transcript = result[0].transcript;
-                
-                subtitleEl.textContent = `"${transcript}"`;
-                
-                if (result.isFinal) {
-                    console.log('📝 识别结果:', transcript);
-                    addUserEntry(transcript);
-                    sendMessage(transcript);
+                if (state.speaking) return;
+
+                let interimTranscript = '';
+
+                for (let i = e.resultIndex; i < e.results.length; i++) {
+                    const transcript = e.results[i][0].transcript;
+                    if (e.results[i].isFinal) {
+                        accumulatedText += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
                 }
+
+                const display = accumulatedText + interimTranscript;
+                subtitleEl.textContent = display ? `"${display}"` : '';
+
+                resetSilenceTimer();
             };
 
             recognition.onend = () => {
+                console.log('🔇 监听结束，累积文本:', accumulatedText || '(无)');
+                
+                if (accumulatedText.trim()) {
+                    addUserEntry(accumulatedText.trim());
+                    sendMessage(accumulatedText.trim());
+                }
+
+                accumulatedText = '';
                 isRecognizing = false;
                 state.listening = false;
                 updateUI();
-                console.log('🔇 监听结束');
-                
+
                 if (state.continuous && !state.speaking) {
                     recognitionTimeout = setTimeout(() => {
-                        startListening();
-                    }, 2000);
+                        if (!state.speaking) startListening();
+                    }, 800);
                 }
             };
 
             recognition.onerror = (e) => {
                 console.log('❌ 识别错误:', e.error);
+                
+                if (e.error === 'no-speech') {
+                    return;
+                }
+
                 isRecognizing = false;
                 state.listening = false;
                 updateUI();
@@ -740,7 +768,7 @@
                 
                 if (state.continuous && !state.speaking) {
                     recognitionTimeout = setTimeout(() => {
-                        startListening();
+                        if (!state.speaking) startListening();
                     }, 3000);
                 }
             };
@@ -753,12 +781,38 @@
             }
         }
 
+        function resetSilenceTimer() {
+            if (silenceTimer) clearTimeout(silenceTimer);
+            silenceTimer = setTimeout(() => {
+                if (accumulatedText.trim()) {
+                    console.log('⏳ 静默超时，发送累积文本');
+                    addUserEntry(accumulatedText.trim());
+                    sendMessage(accumulatedText.trim());
+                    accumulatedText = '';
+                    
+                    if (recognition) {
+                        try { recognition.stop(); } catch (e) {}
+                    }
+                }
+            }, SILENCE_DELAY);
+        }
+
         function stopListening() {
             if (recognitionTimeout) {
                 clearTimeout(recognitionTimeout);
                 recognitionTimeout = null;
             }
+            if (silenceTimer) {
+                clearTimeout(silenceTimer);
+                silenceTimer = null;
+            }
             
+            if (accumulatedText.trim()) {
+                addUserEntry(accumulatedText.trim());
+                sendMessage(accumulatedText.trim());
+                accumulatedText = '';
+            }
+
             if (recognition) {
                 try { recognition.stop(); } catch (e) {}
             }
@@ -798,7 +852,7 @@
             const entry = document.createElement('div');
             entry.className = 'transcript-entry';
             entry.innerHTML = `
-                <div class="transcript-label">JARVIS</div>
+                <div class="transcript-label">Mimo</div>
                 <div class="transcript-text ai">${text}</div>
             `;
             transcriptEl.appendChild(entry);
@@ -807,7 +861,7 @@
 
         function updateLastAIEntry(text) {
             let lastAI = transcriptEl.querySelector('.transcript-entry:last-child .transcript-text.ai');
-            if (!lastAI || lastAI.parentElement.querySelector('.transcript-label').textContent !== 'JARVIS') {
+            if (!lastAI || lastAI.parentElement.querySelector('.transcript-label').textContent !== 'Mimo') {
                 addAIEntry(text);
             } else {
                 lastAI.textContent = text;
@@ -818,8 +872,8 @@
         function clearTranscript() {
             transcriptEl.innerHTML = `
                 <div class="transcript-entry">
-                    <div class="transcript-label">JARVIS</div>
-                    <div class="transcript-text ai">对话已清空。有什么可以帮您的？</div>
+                <div class="transcript-label">Mimo</div>
+                <div class="transcript-text ai">对话已清空。有什么可以帮您的？</div>
                 </div>
             `;
         }
@@ -833,6 +887,9 @@
 
             if ('speechSynthesis' in window) {
                 speechSynthesis.cancel();
+
+                stopListening();
+
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'zh-CN';
                 utterance.rate = 1.1;
@@ -840,14 +897,16 @@
                 utterance.onstart = () => {
                     state.speaking = true;
                     updateUI();
+                    console.log('🗣️ TTS 播放中，麦克风已暂停');
                 };
                 
                 utterance.onend = () => {
                     state.speaking = false;
                     updateUI();
+                    console.log('🔇 TTS 结束，恢复麦克风');
                     
                     if (state.continuous) {
-                        setTimeout(() => startListening(), 500);
+                        setTimeout(() => startListening(), 800);
                     }
                 };
                 
@@ -926,7 +985,7 @@
         
         // Auto-start listening after a delay
         setTimeout(() => {
-            showNotification('🎤 说 "Jarvis" 唤醒');
+            showNotification('🎤 说 "Mimo" 唤醒');
         }, 1000);
     </script>
 </body>

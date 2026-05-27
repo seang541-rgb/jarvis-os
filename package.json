@@ -1,7 +1,7 @@
 {
-  "name": "jarvis-mvp",
+  "name": "mimo-assistant",
   "version": "1.0.0",
-  "description": "JARVIS AI Assistant MVP",
+  "description": "Mimo AI Assistant MVP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

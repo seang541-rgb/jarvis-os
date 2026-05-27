@@ -16,6 +16,8 @@
     "@picovoice/pvrecorder-node": "^1.2.8",
     "express": "^5.2.1",
     "node-edge-tts": "^1.2.10",
+    "pixi-live2d-display": "^0.4.0",
+    "pixi.js": "^7.4.3",
     "puppeteer-core": "^25.1.0",
     "ws": "^8.21.0"
   }

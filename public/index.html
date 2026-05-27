@@ -379,21 +379,46 @@
     //  WEBSOCKET
     // ============================================================
     let ws, isConnected = false, currentTranscript = '';
+    const audioQueue = [];
+    let isPlayingQueue = false;
+
+    function playNextInQueue() {
+        if (audioQueue.length === 0) { isPlayingQueue = false; state.speaking = false; updateUI(); if (state.continuous) setTimeout(() => startListening(), 500); return; }
+        isPlayingQueue = true;
+        const base64 = audioQueue.shift();
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url); audio.crossOrigin = 'anonymous';
+        audio.onplay = () => { connectAudioElement(audio); };
+        audio.onended = () => { URL.revokeObjectURL(url); playNextInQueue(); };
+        audio.onerror = () => { URL.revokeObjectURL(url); playNextInQueue(); };
+        audio.play().catch(() => { URL.revokeObjectURL(url); playNextInQueue(); });
+    }
+
     function connect() {
         ws = new WebSocket(`ws://${window.location.host}`);
         ws.onopen = () => { isConnected = true; };
         ws.onmessage = (e) => {
             const d = JSON.parse(e.data);
-            if (d.type === 'response_start') { state.speaking = true; currentTranscript = ''; updateUI(); }
+            if (d.type === 'response_start') { state.speaking = true; currentTranscript = ''; audioQueue.length = 0; isPlayingQueue = false; updateUI(); }
             else if (d.type === 'response_chunk') { currentTranscript += d.text; updateLastAIEntry(currentTranscript); }
+            else if (d.type === 'audio_chunk') {
+                audioQueue.push(d.audio);
+                if (!isPlayingQueue) playNextInQueue();
+            }
             else if (d.type === 'response_end') {
-                state.speaking = false; updateUI();
                 const songMatch = d.fullText?.match(/《(.+?)》/);
                 if (songMatch && d.fullText.includes('演唱')) {
+                    audioQueue.length = 0; isPlayingQueue = false;
                     sing(songMatch[1]);
-                } else if (d.fullText && state.ttsEnabled) {
-                    speak(d.fullText);
-                } else if (state.continuous) setTimeout(() => startListening(), 500);
+                } else if (!isPlayingQueue && audioQueue.length === 0) {
+                    state.speaking = false; updateUI();
+                    if (d.fullText && state.ttsEnabled) speak(d.fullText);
+                    else if (state.continuous) setTimeout(() => startListening(), 500);
+                }
             }
         };
         ws.onclose = () => { isConnected = false; setTimeout(connect, 2000); };

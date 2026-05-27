@@ -24,7 +24,7 @@ const MIMO_MODEL = 'mimo-v2.5-pro';
 // NVIDIA API (Qwen)
 const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
-const NVIDIA_MODEL = 'qwen/qwen3.5-122b-a10b';
+const NVIDIA_MODEL = 'deepseek-ai/deepseek-v4-flash';
 
 // Active API config (switchable)
 let activeAPI = {
@@ -1349,8 +1349,22 @@ async function streamMiMoAPI(messages, ws, sessionId) {
 
         let fullText = '';
         let toolCalls = [];
+        let sentenceBuffer = '';
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+
+        const SENTENCE_END = /[。！？～…）】"']+$/;
+
+        async function flushSentence(text) {
+            if (!text.trim()) return;
+            try {
+                const tts = new EdgeTTS();
+                const tmpFile = path.join(__dirname, '.tts_stream.mp3');
+                await tts.ttsPromise(text.trim(), tmpFile, { voice: TTS_VOICE });
+                const buf = fs.readFileSync(tmpFile);
+                ws.send(JSON.stringify({ type: 'audio_chunk', audio: buf.toString('base64') }));
+            } catch (e) {}
+        }
 
         while (true) {
             const { done, value } = await reader.read();
@@ -1370,7 +1384,14 @@ async function streamMiMoAPI(messages, ws, sessionId) {
                     
                     if (delta?.content) {
                         fullText += delta.content;
+                        sentenceBuffer += delta.content;
                         ws.send(JSON.stringify({ type: 'response_chunk', text: delta.content }));
+
+                        if (SENTENCE_END.test(sentenceBuffer) && sentenceBuffer.length > 5) {
+                            const toSpeak = sentenceBuffer;
+                            sentenceBuffer = '';
+                            flushSentence(toSpeak);
+                        }
                     }
                     
                     if (delta?.tool_calls) {
@@ -1388,6 +1409,8 @@ async function streamMiMoAPI(messages, ws, sessionId) {
                 } catch (e) {}
             }
         }
+
+        if (sentenceBuffer.trim()) flushSentence(sentenceBuffer);
 
         // Execute tool calls
         if (toolCalls.length > 0) {

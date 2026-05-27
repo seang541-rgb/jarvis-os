@@ -454,7 +454,8 @@
     //  INIT
     // ============================================================
     updateUI();
-    initLive2D().then(() => { render(); });
+    initLive2D().then(() => { render(); }).catch(() => { render(); });
+    setTimeout(() => { if (!isRecognizing && state.continuous) startListening(); }, 2000);
     </script>
 </body>
 </html>

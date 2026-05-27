@@ -4,6 +4,9 @@ const WebSocket = require('ws');
 const path = require('path');
 const { exec } = require('child_process');
 const puppeteer = require('puppeteer-core');
+const { EdgeTTS } = require('node-edge-tts');
+
+const TTS_VOICE = 'zh-CN-YunxiNeural';
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -312,6 +315,21 @@ app.get('/api/browser/status', async (req, res) => {
     }
     
     res.json({ isOpen, title, url });
+});
+
+app.post('/api/tts', async (req, res) => {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: '缺少 text 参数' });
+
+    try {
+        const tts = new EdgeTTS();
+        const tmpFile = path.join(__dirname, '.tts_tmp.mp3');
+        await tts.ttsPromise(text, tmpFile, { voice: TTS_VOICE });
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.sendFile(tmpFile);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // API endpoint to configure HomeAssistant

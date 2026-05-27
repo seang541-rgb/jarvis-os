@@ -7,3 +7,4 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+.tts_tmp.mp3

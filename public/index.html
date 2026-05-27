@@ -467,6 +467,11 @@
         </div>
 
         <div class="settings-group">
+            <div class="settings-label">语音声音</div>
+            <div class="settings-value">YunxiNeural（儒雅男声）</div>
+        </div>
+
+        <div class="settings-group">
             <div class="settings-label">唤醒词</div>
             <div class="settings-value">丞相</div>
         </div>
@@ -885,56 +890,39 @@
                 return;
             }
 
-            if (!('speechSynthesis' in window)) return;
-
-            speechSynthesis.cancel();
             stopListening();
+            state.speaking = true;
+            updateUI();
 
-            function doSpeak() {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'zh-CN';
-                utterance.rate = 0.88;
-                utterance.pitch = 0.82;
-                utterance.volume = 1.0;
+            const audio = new Audio('/api/tts?text=' + encodeURIComponent(text));
 
-                const voices = cachedVoices.length > 0 ? cachedVoices : speechSynthesis.getVoices();
-                const zhVoices = voices.filter(v => v.lang.startsWith('zh'));
+            audio.onplay = () => {
+                console.log('🗣️ 丞相朗读中');
+            };
 
-                if (zhVoices.length > 0) {
-                    console.log('🗣️ 候选中文声音:', zhVoices.map(v => `${v.name} [${v.lang}]`).join(', '));
-                    utterance.voice = zhVoices[0];
-                    console.log('🗣️ 使用声音:', zhVoices[0].name);
+            audio.onended = () => {
+                state.speaking = false;
+                updateUI();
+                console.log('🔇 朗读结束');
+                if (state.continuous) {
+                    setTimeout(() => startListening(), 800);
                 }
+            };
 
-                utterance.onstart = () => {
-                    state.speaking = true;
-                    updateUI();
-                    console.log('🗣️ TTS 播放中');
-                };
-                
-                utterance.onend = () => {
-                    state.speaking = false;
-                    updateUI();
-                    console.log('🔇 TTS 结束');
-                    
-                    if (state.continuous) {
-                        setTimeout(() => startListening(), 800);
-                    }
-                };
-                
-                speechSynthesis.speak(utterance);
-            }
+            audio.onerror = (e) => {
+                console.error('TTS 播放失败:', e);
+                state.speaking = false;
+                updateUI();
+                if (state.continuous) {
+                    setTimeout(() => startListening(), 800);
+                }
+            };
 
-            const voices = cachedVoices.length > 0 ? cachedVoices : speechSynthesis.getVoices();
-            if (voices.length === 0) {
-                console.log('⏳ 等待声音加载...');
-                speechSynthesis.onvoiceschanged = () => {
-                    cachedVoices = speechSynthesis.getVoices();
-                    doSpeak();
-                };
-            } else {
-                doSpeak();
-            }
+            audio.play().catch(e => {
+                console.error('播放被阻止:', e);
+                state.speaking = false;
+                updateUI();
+            });
         }
 
         // ========== Button Handlers ==========
@@ -1004,20 +992,6 @@
         }
 
         // ========== Initialize ==========
-        let cachedVoices = [];
-
-        function loadVoices() {
-            cachedVoices = speechSynthesis.getVoices();
-            const zhVoices = cachedVoices.filter(v => v.lang.startsWith('zh'));
-            console.log('🗣️ 所有声音:', cachedVoices.map(v => `${v.name} (${v.lang})`).join(', '));
-            console.log('🗣️ 中文声音:', zhVoices.map(v => `${v.name} [${v.lang}]`).join(', ') || '无');
-        }
-
-        if ('speechSynthesis' in window) {
-            loadVoices();
-            speechSynthesis.onvoiceschanged = loadVoices;
-        }
-
         updateUI();
         
         // Auto-start listening after a delay

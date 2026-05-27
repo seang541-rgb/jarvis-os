@@ -892,7 +892,31 @@
 
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'zh-CN';
-                utterance.rate = 1.1;
+                utterance.rate = 0.88;
+                utterance.pitch = 0.82;
+                utterance.volume = 1.0;
+
+                const voices = speechSynthesis.getVoices();
+                const preferred = [
+                    'Microsoft Kangkang',
+                    'Microsoft Huihui',
+                    'Google 普通话（中国大陆）',
+                    'Google 中文（中国大陆）',
+                    'Ting-Ting',
+                    'Sin-ji'
+                ];
+                let voice = null;
+                for (const name of preferred) {
+                    voice = voices.find(v => v.name.includes(name) && v.lang.startsWith('zh'));
+                    if (voice) break;
+                }
+                if (!voice) {
+                    voice = voices.find(v => v.lang.startsWith('zh'));
+                }
+                if (voice) {
+                    utterance.voice = voice;
+                    console.log('🗣️ 使用声音:', voice.name);
+                }
                 
                 utterance.onstart = () => {
                     state.speaking = true;
@@ -981,6 +1005,15 @@
         }
 
         // ========== Initialize ==========
+        if ('speechSynthesis' in window) {
+            speechSynthesis.getVoices();
+            speechSynthesis.onvoiceschanged = () => {
+                const voices = speechSynthesis.getVoices();
+                const zhVoices = voices.filter(v => v.lang.startsWith('zh'));
+                console.log('🗣️ 可用中文声音:', zhVoices.map(v => v.name).join(', ') || '无');
+            };
+        }
+
         updateUI();
         
         // Auto-start listening after a delay

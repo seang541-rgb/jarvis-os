@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS - AI Voice Assistant</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #050510;
+            --accent: #00d4ff;
+            --accent2: #7b2fff;
+            --glow: rgba(0, 212, 255, 0.4);
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--bg);
+            color: #e0e8ff;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Background Particles */
+        #particles {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+        }
+
+        /* Main Container */
+        .container {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+            padding: 40px;
+        }
+
+        /* Orb */
+        .orb-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 40px;
+        }
+
+        .orb {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, var(--accent), var(--accent2));
+            box-shadow: 0 0 60px var(--glow), 0 0 120px rgba(123, 47, 255, 0.3);
+            animation: float 4s ease-in-out infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .orb.listening {
+            animation: pulse-listen 1.5s ease-in-out infinite;
+            box-shadow: 0 0 80px var(--glow), 0 0 160px rgba(123, 47, 255, 0.4);
+        }
+
+        .orb.speaking {
+            animation: pulse-speak 0.8s ease-in-out infinite;
+            box-shadow: 0 0 100px rgba(0, 255, 136, 0.4), 0 0 200px rgba(0, 255, 136, 0.2);
+            background: radial-gradient(circle at 35% 35%, #00ff88, #00cc6a);
+        }
+
+        .orb-icon {
+            font-size: 60px;
+            transition: all 0.3s;
+        }
+
+        .orb-ring {
+            position: absolute;
+            inset: -20px;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+            opacity: 0.3;
+            animation: ring-rotate 8s linear infinite;
+        }
+
+        .orb-ring:nth-child(2) {
+            inset: -40px;
+            border-color: var(--accent2);
+            animation-duration: 12s;
+            animation-direction: reverse;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        @keyframes pulse-listen {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 60px var(--glow); }
+            50% { transform: scale(1.05); box-shadow: 0 0 100px var(--glow); }
+        }
+
+        @keyframes pulse-speak {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        @keyframes ring-rotate {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Waveform */
+        .waveform {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            height: 80px;
+            margin-bottom: 30px;
+        }
+
+        .wave-bar {
+            width: 4px;
+            height: 4px;
+            background: linear-gradient(to top, var(--accent), var(--accent2));
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        /* Status */
+        .status {
+            font-size: 1.2rem;
+            color: var(--accent);
+            margin-bottom: 12px;
+            font-weight: 500;
+            min-height: 30px;
+        }
+
+        .status.speaking {
+            color: #00ff88;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: #6b7db3;
+            margin-bottom: 30px;
+            min-height: 24px;
+        }
+
+        /* Transcript */
+        .transcript-container {
+            background: rgba(10, 15, 30, 0.8);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 30px;
+            min-height: 120px;
+            max-height: 300px;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        .transcript-entry {
+            margin-bottom: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .transcript-entry:last-child {
+            margin-bottom: 0;
+        }
+
+        .transcript-label {
+            font-size: 0.75rem;
+            color: #6b7db3;
+            margin-bottom: 4px;
+        }
+
+        .transcript-text {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        .transcript-text.user {
+            color: #e0e8ff;
+        }
+
+        .transcript-text.ai {
+            color: var(--accent);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .btn {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+        }
+
+        .btn-mic {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: white;
+            box-shadow: 0 4px 20px var(--glow);
+        }
+
+        .btn-mic:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 30px var(--glow);
+        }
+
+        .btn-mic.active {
+            animation: mic-pulse 1.5s infinite;
+        }
+
+        @keyframes mic-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 var(--glow); }
+            50% { box-shadow: 0 0 0 20px rgba(0, 212, 255, 0); }
+        }
+
+        .btn-secondary {
+            background: rgba(30, 35, 60, 0.8);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: var(--accent);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: var(--accent);
+        }
+
+        /* Mode Indicator */
+        .mode-indicator {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(10, 15, 30, 0.9);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            z-index: 10;
+        }
+
+        .mode-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff88;
+            box-shadow: 0 0 8px #00ff88;
+        }
+
+        .mode-dot.inactive {
+            background: #666;
+            box-shadow: none;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            position: fixed;
+            right: -400px;
+            top: 0;
+            bottom: 0;
+            width: 380px;
+            background: rgba(10, 15, 30, 0.95);
+            border-left: 1px solid rgba(0, 212, 255, 0.2);
+            padding: 24px;
+            transition: right 0.3s ease;
+            z-index: 100;
+            overflow-y: auto;
+        }
+
+        .settings-panel.open {
+            right: 0;
+        }
+
+        .settings-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .settings-group {
+            margin-bottom: 24px;
+        }
+
+        .settings-label {
+            font-size: 0.85rem;
+            color: #6b7db3;
+            margin-bottom: 8px;
+        }
+
+        .settings-value {
+            font-size: 0.9rem;
+            padding: 10px 14px;
+            background: rgba(20, 25, 50, 0.8);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        .settings-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .toggle-switch {
+            width: 44px;
+            height: 24px;
+            background: #333;
+            border-radius: 12px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: var(--accent);
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: all 0.3s;
+        }
+
+        .toggle-switch.active::after {
+            left: 22px;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            background: rgba(10, 15, 30, 0.95);
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            font-size: 0.9rem;
+            z-index: 1000;
+            animation: slideDown 0.3s ease;
+            box-shadow: 0 4px 20px var(--glow);
+        }
+
+        @keyframes slideDown {
+            from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.3); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <!-- Background Particles -->
+    <canvas id="particles"></canvas>
+
+    <!-- Mode Indicator -->
+    <div class="mode-indicator">
+        <div class="mode-dot" id="mode-dot"></div>
+        <span id="mode-text">等待唤醒</span>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Orb -->
+        <div class="orb-container">
+            <div class="orb-ring"></div>
+            <div class="orb-ring"></div>
+            <div class="orb" id="orb">
+                <span class="orb-icon">🤖</span>
+            </div>
+        </div>
+
+        <!-- Waveform -->
+        <div class="waveform" id="waveform">
+            <!-- Generated by JS -->
+        </div>
+
+        <!-- Status -->
+        <div class="status" id="status">说 "Jarvis" 唤醒我</div>
+        <div class="subtitle" id="subtitle">或按住麦克风按钮说话</div>
+
+        <!-- Transcript -->
+        <div class="transcript-container" id="transcript">
+            <div class="transcript-entry">
+                <div class="transcript-label">JARVIS</div>
+                <div class="transcript-text ai">晚上好，先生。随时准备为您服务。</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="toggleSettings()" title="设置">⚙️</button>
+            <button class="btn btn-mic" id="btn-mic" onclick="toggleListening()" title="按住说话">🎤</button>
+            <button class="btn btn-secondary" onclick="clearTranscript()" title="清空">🗑️</button>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settings-panel">
+        <div class="settings-title">
+            设置
+            <button class="btn btn-secondary" style="width:32px;height:32px;font-size:1rem;" onclick="toggleSettings()">✕</button>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-toggle">
+                <span>语音唤醒</span>
+                <div class="toggle-switch active" id="toggle-wake" onclick="toggleWakeWord()"></div>
+            </div>
+            <div class="settings-toggle">
+                <span>连续对话</span>
+                <div class="toggle-switch active" id="toggle-continuous" onclick="toggleContinuous()"></div>
+            </div>
+            <div class="settings-toggle">
+                <span>语音回复</span>
+                <div class="toggle-switch active" id="toggle-tts" onclick="toggleTTS()"></div>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-label">AI 模型</div>
+            <div class="settings-value">MiMo-v2.5-pro</div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-label">唤醒词</div>
+            <div class="settings-value">Jarvis</div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-label">快捷键</div>
+            <div class="settings-value">Ctrl+Space 唤醒 · Esc 退出</div>
+        </div>
+    </div>
+
+    <script>
+        // ========== Particles Background ==========
+        const canvas = document.getElementById('particles');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const particles = [];
+        for (let i = 0; i < 60; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2 + 0.5,
+                speedX: (Math.random() - 0.5) * 0.3,
+                speedY: (Math.random() - 0.5) * 0.3,
+                opacity: Math.random() * 0.4 + 0.1
+            });
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            particles.forEach(p => {
+                p.x += p.speedX;
+                p.y += p.speedY;
+                if (p.x < 0 || p.x > canvas.width) p.speedX *= -1;
+                if (p.y < 0 || p.y > canvas.height) p.speedY *= -1;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 212, 255, ${p.opacity})`;
+                ctx.fill();
+            });
+
+            // Draw connections
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = `rgba(0, 212, 255, ${0.08 * (1 - dist / 120)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // ========== Waveform ==========
+        const waveform = document.getElementById('waveform');
+        const barCount = 30;
+        for (let i = 0; i < barCount; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'wave-bar';
+            waveform.appendChild(bar);
+        }
+        const waveBars = document.querySelectorAll('.wave-bar');
+
+        function animateWaveform(active) {
+            waveBars.forEach(bar => {
+                if (active) {
+                    bar.style.height = (Math.random() * 60 + 4) + 'px';
+                } else {
+                    bar.style.height = '4px';
+                }
+            });
+        }
+
+        // ========== State Management ==========
+        let state = {
+            listening: false,
+            speaking: false,
+            continuous: true,
+            ttsEnabled: true,
+            wakeWordEnabled: true
+        };
+
+        const orb = document.getElementById('orb');
+        const statusEl = document.getElementById('status');
+        const subtitleEl = document.getElementById('subtitle');
+        const transcriptEl = document.getElementById('transcript');
+        const modeDot = document.getElementById('mode-dot');
+        const modeText = document.getElementById('mode-text');
+
+        function updateUI() {
+            // Update orb
+            orb.className = 'orb';
+            if (state.listening) orb.classList.add('listening');
+            if (state.speaking) orb.classList.add('speaking');
+
+            // Update icon
+            orb.querySelector('.orb-icon').textContent = state.listening ? '👂' : state.speaking ? '🗣️' : '🤖';
+
+            // Update status
+            if (state.listening) {
+                statusEl.textContent = '正在听您说...';
+                statusEl.className = 'status';
+            } else if (state.speaking) {
+                statusEl.textContent = '正在回复...';
+                statusEl.className = 'status speaking';
+            } else {
+                statusEl.textContent = '说 "Jarvis" 唤醒我';
+                statusEl.className = 'status';
+            }
+
+            // Update mode indicator
+            modeDot.className = 'mode-dot' + (state.listening || state.speaking ? '' : ' inactive');
+            modeText.textContent = state.listening ? '聆听中' : state.speaking ? '回复中' : '等待唤醒';
+
+            // Animate waveform
+            animateWaveform(state.listening || state.speaking);
+        }
+
+        // ========== WebSocket Connection ==========
+        let ws;
+        let currentTranscript = '';
+        let isConnected = false;
+        let messageQueue = [];
+
+        function connect() {
+            ws = new WebSocket(`ws://${window.location.host}`);
+            
+            ws.onopen = () => {
+                isConnected = true;
+                console.log('Connected to JARVIS');
+                showNotification('✅ 已连接');
+                
+                // Send any queued messages
+                while (messageQueue.length > 0) {
+                    const msg = messageQueue.shift();
+                    ws.send(msg);
+                }
+            };
+
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                
+                if (data.type === 'response_start') {
+                    state.speaking = true;
+                    currentTranscript = '';
+                    updateUI();
+                }
+                else if (data.type === 'response_chunk') {
+                    currentTranscript += data.text;
+                    updateLastAIEntry(currentTranscript);
+                }
+                else if (data.type === 'response_end') {
+                    state.speaking = false;
+                    updateUI();
+                    
+                    if (data.fullText && state.ttsEnabled) {
+                        speak(data.fullText);
+                    } else if (state.continuous) {
+                        setTimeout(() => startListening(), 500);
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                isConnected = false;
+                console.log('Disconnected from JARVIS');
+                setTimeout(connect, 2000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                isConnected = false;
+            };
+        }
+        connect();
+
+        // ========== Speech Recognition ==========
+        let recognition = null;
+        let isRecognizing = false;
+        let recognitionTimeout = null;
+
+        function toggleListening() {
+            if (isRecognizing) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (isRecognizing) return;
+            
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                showNotification('❌ 请使用Chrome浏览器');
+                return;
+            }
+
+            if (recognitionTimeout) {
+                clearTimeout(recognitionTimeout);
+                recognitionTimeout = null;
+            }
+
+            if (recognition) {
+                try { recognition.abort(); } catch (e) {}
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'zh-CN';
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = () => {
+                isRecognizing = true;
+                state.listening = true;
+                updateUI();
+                console.log('🎤 开始监听');
+            };
+
+            recognition.onresult = (e) => {
+                const result = e.results[e.results.length - 1];
+                const transcript = result[0].transcript;
+                
+                subtitleEl.textContent = `"${transcript}"`;
+                
+                if (result.isFinal) {
+                    console.log('📝 识别结果:', transcript);
+                    addUserEntry(transcript);
+                    sendMessage(transcript);
+                }
+            };
+
+            recognition.onend = () => {
+                isRecognizing = false;
+                state.listening = false;
+                updateUI();
+                console.log('🔇 监听结束');
+                
+                if (state.continuous && !state.speaking) {
+                    recognitionTimeout = setTimeout(() => {
+                        startListening();
+                    }, 2000);
+                }
+            };
+
+            recognition.onerror = (e) => {
+                console.log('❌ 识别错误:', e.error);
+                isRecognizing = false;
+                state.listening = false;
+                updateUI();
+                
+                if (e.error === 'aborted') return;
+                
+                if (state.continuous && !state.speaking) {
+                    recognitionTimeout = setTimeout(() => {
+                        startListening();
+                    }, 3000);
+                }
+            };
+
+            try {
+                recognition.start();
+            } catch (e) {
+                console.log('启动识别失败:', e);
+                isRecognizing = false;
+            }
+        }
+
+        function stopListening() {
+            if (recognitionTimeout) {
+                clearTimeout(recognitionTimeout);
+                recognitionTimeout = null;
+            }
+            
+            if (recognition) {
+                try { recognition.stop(); } catch (e) {}
+            }
+            
+            isRecognizing = false;
+            state.listening = false;
+            updateUI();
+        }
+        function sendMessage(text) {
+            if (!text.trim()) return;
+            
+            subtitleEl.textContent = '';
+            
+            const message = JSON.stringify({ type: 'chat', text: text });
+            
+            if (isConnected && ws.readyState === WebSocket.OPEN) {
+                ws.send(message);
+            } else {
+                console.log('Message queued (not connected)');
+                messageQueue.push(message);
+                showNotification('⏳ 等待连接...');
+            }
+        }
+
+        function addUserEntry(text) {
+            const entry = document.createElement('div');
+            entry.className = 'transcript-entry';
+            entry.innerHTML = `
+                <div class="transcript-label">您</div>
+                <div class="transcript-text user">${text}</div>
+            `;
+            transcriptEl.appendChild(entry);
+            transcriptEl.scrollTop = transcriptEl.scrollHeight;
+        }
+
+        function addAIEntry(text) {
+            const entry = document.createElement('div');
+            entry.className = 'transcript-entry';
+            entry.innerHTML = `
+                <div class="transcript-label">JARVIS</div>
+                <div class="transcript-text ai">${text}</div>
+            `;
+            transcriptEl.appendChild(entry);
+            transcriptEl.scrollTop = transcriptEl.scrollHeight;
+        }
+
+        function updateLastAIEntry(text) {
+            let lastAI = transcriptEl.querySelector('.transcript-entry:last-child .transcript-text.ai');
+            if (!lastAI || lastAI.parentElement.querySelector('.transcript-label').textContent !== 'JARVIS') {
+                addAIEntry(text);
+            } else {
+                lastAI.textContent = text;
+            }
+            transcriptEl.scrollTop = transcriptEl.scrollHeight;
+        }
+
+        function clearTranscript() {
+            transcriptEl.innerHTML = `
+                <div class="transcript-entry">
+                    <div class="transcript-label">JARVIS</div>
+                    <div class="transcript-text ai">对话已清空。有什么可以帮您的？</div>
+                </div>
+            `;
+        }
+
+        // ========== Text-to-Speech ==========
+        function speak(text) {
+            if (!state.ttsEnabled) {
+                if (state.continuous) setTimeout(() => startListening(), 500);
+                return;
+            }
+
+            if ('speechSynthesis' in window) {
+                speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-CN';
+                utterance.rate = 1.1;
+                
+                utterance.onstart = () => {
+                    state.speaking = true;
+                    updateUI();
+                };
+                
+                utterance.onend = () => {
+                    state.speaking = false;
+                    updateUI();
+                    
+                    if (state.continuous) {
+                        setTimeout(() => startListening(), 500);
+                    }
+                };
+                
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        // ========== Button Handlers ==========
+        function toggleListening() {
+            if (state.listening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        // Push-to-talk
+        const micBtn = document.getElementById('btn-mic');
+        micBtn.addEventListener('mousedown', () => {
+            if (!state.listening) startListening();
+        });
+        micBtn.addEventListener('mouseup', () => {
+            // Keep listening in continuous mode
+        });
+        micBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!state.listening) startListening();
+        });
+
+        // ========== Hotkeys ==========
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.code === 'Space') {
+                e.preventDefault();
+                if (state.listening) {
+                    stopListening();
+                } else {
+                    startListening();
+                }
+            }
+            if (e.code === 'Escape') {
+                stopListening();
+            }
+        });
+
+        // ========== Settings ==========
+        function toggleSettings() {
+            document.getElementById('settings-panel').classList.toggle('open');
+        }
+
+        function toggleWakeWord() {
+            state.wakeWordEnabled = !state.wakeWordEnabled;
+            document.getElementById('toggle-wake').classList.toggle('active');
+        }
+
+        function toggleContinuous() {
+            state.continuous = !state.continuous;
+            document.getElementById('toggle-continuous').classList.toggle('active');
+        }
+
+        function toggleTTS() {
+            state.ttsEnabled = !state.ttsEnabled;
+            document.getElementById('toggle-tts').classList.toggle('active');
+        }
+
+        // ========== Notifications ==========
+        function showNotification(text) {
+            const notif = document.createElement('div');
+            notif.className = 'notification';
+            notif.textContent = text;
+            document.body.appendChild(notif);
+            setTimeout(() => notif.remove(), 2000);
+        }
+
+        // ========== Initialize ==========
+        updateUI();
+        
+        // Auto-start listening after a delay
+        setTimeout(() => {
+            showNotification('🎤 说 "Jarvis" 唤醒');
+        }, 1000);
+    </script>
+</body>
+</html>

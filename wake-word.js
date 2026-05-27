@@ -10,7 +10,7 @@ const fs = require('fs');
 const ACCESS_KEY = process.env.PORCUPINE_KEY || '';
 
 // Custom wake word - 在 https://console.picovoice.ai/ 创建 "Mimo" 唤醒词并下载 .ppn 文件
-const CUSTOM_KEYWORD_PATH = process.env.ZF_WAKEWORD_PATH || path.join(__dirname, 'zifang_wake_word.ppn');
+const CUSTOM_KEYWORD_PATH = process.env.ZF_WAKEWORD_PATH || path.join(__dirname, 'oichi_wake_word.ppn');
 
 const MIMO_SERVER = 'ws://localhost:3000';
 
@@ -23,7 +23,7 @@ class WakeWordDetector {
     }
 
     async start() {
-        console.log('🎤 子房 唤醒词检测器');
+        console.log('🎤 小市 唤醒词检测器');
         console.log('============================');
         
         if (!ACCESS_KEY) {
@@ -38,8 +38,8 @@ class WakeWordDetector {
 
         if (!fs.existsSync(CUSTOM_KEYWORD_PATH)) {
             console.log('\n⚠️  唤醒词文件不存在: ' + CUSTOM_KEYWORD_PATH);
-            console.log('请到 https://console.picovoice.ai/ 创建 "子房" 唤醒词');
-            console.log('下载 .ppn 文件并放到项目目录，命名为 zifang_wake_word.ppn\n');
+            console.log('请到 https://console.picovoice.ai/ 创建 "小市" 唤醒词');
+            console.log('下载 .ppn 文件并放到项目目录，命名为 oichi_wake_word.ppn\n');
             
             console.log('🔄 使用热键模式 (Ctrl+Space) ...\n');
             this.startHotkeyMode();
@@ -53,7 +53,7 @@ class WakeWordDetector {
                 [0.5]
             );
 
-            console.log(`✅ 唤醒词: "子房"`);
+            console.log(`✅ 唤醒词: "小市"`);
             console.log(`✅ 灵敏度: 0.5`);
             console.log(`✅ 采样率: ${this.porcupine.sampleRate}`);
             console.log(`✅ 帧长度: ${this.porcupine.frameLength}`);
@@ -62,7 +62,7 @@ class WakeWordDetector {
             await this.recorder.start();
 
             console.log('\n🎧 正在监听唤醒词...');
-            console.log('说 "子房" 唤醒助手\n');
+            console.log('说 "小市" 唤醒助手\n');
 
             this.isListening = true;
             this.processAudio();
@@ -81,7 +81,7 @@ class WakeWordDetector {
                 const keywordIndex = this.porcupine.process(pcm);
 
                 if (keywordIndex >= 0) {
-                    console.log('🎯 检测到唤醒词 "子房"!');
+                    console.log('🎯 检测到唤醒词 "小市"!');
                     this.onWakeWordDetected();
                 }
             } catch (error) {
@@ -95,17 +95,17 @@ class WakeWordDetector {
         // Play activation sound
         this.playSound('activate');
         
-        // Activate 子房
+        // Activate 小市
         this.activateMimo();
     }
 
     activateMimo() {
-        // Send activation signal to 子房 server
+        // Send activation signal to 小市 server
         try {
             const ws = new WebSocket(MIMO_SERVER);
             
             ws.on('open', () => {
-                console.log('✅ 已连接到 子房 服务器');
+                console.log('✅ 已连接到 小市 服务器');
                 
                 // Send activation signal
                 ws.send(JSON.stringify({
@@ -129,7 +129,7 @@ class WakeWordDetector {
 
             ws.on('message', (data) => {
                 const message = JSON.parse(data.toString());
-                console.log(`子房: ${message.text || ''}`);
+                console.log(`小市: ${message.text || ''}`);
             });
 
             ws.on('error', (error) => {
@@ -150,7 +150,7 @@ class WakeWordDetector {
 
     startHotkeyMode() {
             console.log('热键模式已启动');
-            console.log('在浏览器中按 Ctrl+Space 激活 子房\n');
+            console.log('在浏览器中按 Ctrl+Space 激活 小市\n');
         
         // Keep process running
         setInterval(() => {}, 1000);

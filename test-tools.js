@@ -19,7 +19,7 @@ ws.on('message', (data) => {
     const message = JSON.parse(data.toString());
     
     if (message.type === 'response_start') {
-        process.stdout.write('子房: ');
+        process.stdout.write('小市: ');
     }
     else if (message.type === 'response_chunk') {
         process.stdout.write(message.text);

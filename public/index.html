@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>子房 - AI Assistant</title>
+    <title>小市 - AI Assistant</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -139,12 +139,12 @@
 
     <div class="right-panel">
         <div class="status-bar" id="status">等待唤醒</div>
-        <div class="subtitle" id="subtitle">按 Ctrl+Space 或说 "子房" 激活</div>
+        <div class="subtitle" id="subtitle">按 Ctrl+Space 或说 "小市" 激活</div>
         <div class="waveform" id="waveform"></div>
         <div class="transcript-box" id="transcript">
             <div class="entry">
                 <div class="entry-label">ZIFANG</div>
-                <div class="entry-text ai">主公，子房在此，随时听候差遣。</div>
+                <div class="entry-text ai">主公，小市在这里哦～有什么想聊的吗？</div>
             </div>
         </div>
     </div>
@@ -247,7 +247,7 @@
     const modeText = document.getElementById('mode-text');
 
     function updateUI() {
-        if (state.speaking) { orbState = 'speaking'; particleColor = 'rgba(0, 230, 118, 1)'; statusEl.textContent = '子房朗读中'; statusEl.className = 'status-bar speaking'; modeText.textContent = 'SPEAKING'; }
+        if (state.speaking) { orbState = 'speaking'; particleColor = 'rgba(0, 230, 118, 1)'; statusEl.textContent = '小市朗读中'; statusEl.className = 'status-bar speaking'; modeText.textContent = 'SPEAKING'; }
         else if (state.listening) { orbState = 'listening'; particleColor = 'rgba(0, 212, 255, 1)'; statusEl.textContent = '聆听中...'; statusEl.className = 'status-bar'; modeText.textContent = 'LISTENING'; }
         else { orbState = 'idle'; particleColor = 'rgba(0, 212, 255, 1)'; statusEl.textContent = '等待唤醒'; statusEl.className = 'status-bar'; modeText.textContent = 'STANDBY'; }
         modeDot.className = 'mode-dot' + (state.listening || state.speaking ? ' active' : '');
@@ -448,7 +448,7 @@
     // ============================================================
     document.getElementById('btn-mic').addEventListener('click', () => { if (isRecognizing) stopListening(); else startListening(); });
     document.getElementById('btn-mic').addEventListener('mousedown', () => { if (!isRecognizing) startListening(); });
-    document.getElementById('btn-clear').addEventListener('click', () => { transcriptEl.innerHTML = '<div class="entry"><div class="entry-label">ZIFANG</div><div class="entry-text ai">对话已清空。主公有何吩咐？</div></div>'; });
+    document.getElementById('btn-clear').addEventListener('click', () => { transcriptEl.innerHTML = '<div class="entry"><div class="entry-label">ZIFANG</div>                <div class="entry-text ai">对话已清空。主公想聊点什么呢？</div></div>'; });
     document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.code === 'Space') { e.preventDefault(); if (isRecognizing) stopListening(); else startListening(); } if (e.code === 'Escape') stopListening(); });
 
     // ============================================================

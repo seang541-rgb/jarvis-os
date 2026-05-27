@@ -1,7 +1,7 @@
 {
-  "name": "zifang-assistant",
+  "name": "oichi-assistant",
   "version": "1.0.0",
-  "description": "子房 AI Assistant MVP",
+  "description": "小市 AI Assistant MVP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

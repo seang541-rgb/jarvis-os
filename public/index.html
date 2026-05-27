@@ -894,34 +894,43 @@
             state.speaking = true;
             updateUI();
 
-            const audio = new Audio('/api/tts?text=' + encodeURIComponent(text));
+            fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            })
+            .then(r => r.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
 
-            audio.onplay = () => {
-                console.log('🗣️ 丞相朗读中');
-            };
-
-            audio.onended = () => {
+                audio.onplay = () => console.log('🗣️ 丞相朗读中');
+                audio.onended = () => {
+                    state.speaking = false;
+                    updateUI();
+                    URL.revokeObjectURL(url);
+                    console.log('🔇 朗读结束');
+                    if (state.continuous) setTimeout(() => startListening(), 800);
+                };
+                audio.onerror = (e) => {
+                    console.error('TTS 播放失败:', e);
+                    state.speaking = false;
+                    updateUI();
+                    URL.revokeObjectURL(url);
+                    if (state.continuous) setTimeout(() => startListening(), 800);
+                };
+                audio.play().catch(e => {
+                    console.error('播放被阻止:', e);
+                    state.speaking = false;
+                    updateUI();
+                    URL.revokeObjectURL(url);
+                });
+            })
+            .catch(e => {
+                console.error('TTS 请求失败:', e);
                 state.speaking = false;
                 updateUI();
-                console.log('🔇 朗读结束');
-                if (state.continuous) {
-                    setTimeout(() => startListening(), 800);
-                }
-            };
-
-            audio.onerror = (e) => {
-                console.error('TTS 播放失败:', e);
-                state.speaking = false;
-                updateUI();
-                if (state.continuous) {
-                    setTimeout(() => startListening(), 800);
-                }
-            };
-
-            audio.play().catch(e => {
-                console.error('播放被阻止:', e);
-                state.speaking = false;
-                updateUI();
+                if (state.continuous) setTimeout(() => startListening(), 800);
             });
         }
 

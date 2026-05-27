@@ -325,8 +325,10 @@ app.post('/api/tts', async (req, res) => {
         const tts = new EdgeTTS();
         const tmpFile = path.join(__dirname, '.tts_tmp.mp3');
         await tts.ttsPromise(text, tmpFile, { voice: TTS_VOICE });
+        const fs = require('fs');
+        const audioBuffer = fs.readFileSync(tmpFile);
         res.setHeader('Content-Type', 'audio/mpeg');
-        res.sendFile(tmpFile);
+        res.send(audioBuffer);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

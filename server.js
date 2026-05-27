@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const fs = require('fs');
 const { exec } = require('child_process');
 const puppeteer = require('puppeteer-core');
 const { EdgeTTS } = require('node-edge-tts');
@@ -28,6 +29,132 @@ if (!MIMO_API_KEY) {
 // HomeAssistant Config (user will configure later)
 let HA_URL = process.env.HA_URL || '';
 let HA_TOKEN = process.env.HA_TOKEN || '';
+
+// ============================================================
+//  MEMORY SYSTEM
+// ============================================================
+const MEMORY_FILE = path.join(__dirname, 'memory.json');
+const MAX_MEMORIES = 200;
+
+function loadMemories() {
+    try {
+        if (fs.existsSync(MEMORY_FILE)) {
+            return JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf8'));
+        }
+    } catch (e) {}
+    return { userProfile: {}, memories: [], conversationHistory: [] };
+}
+
+function saveMemories(data) {
+    fs.writeFileSync(MEMORY_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+let memoryStore = loadMemories();
+
+function addMemory(content, type = 'conversation', tags = []) {
+    const memory = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        content,
+        type,
+        tags,
+        timestamp: new Date().toISOString(),
+    };
+    memoryStore.memories.push(memory);
+    if (memoryStore.memories.length > MAX_MEMORIES) {
+        memoryStore.memories = memoryStore.memories.slice(-MAX_MEMORIES);
+    }
+    saveMemories(memoryStore);
+    return memory;
+}
+
+function searchMemories(query, limit = 5) {
+    const keywords = query.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ')
+        .split(/\s+/).filter(w => w.length > 1);
+    if (keywords.length === 0) return [];
+
+    const scored = memoryStore.memories.map(m => {
+        let score = 0;
+        for (const kw of keywords) {
+            if (m.content.includes(kw)) score += 2;
+            if (m.tags.some(t => t.includes(kw))) score += 1;
+        }
+        if (m.type === 'user_profile') score += 3;
+        return { ...m, score };
+    }).filter(m => m.score > 0).sort((a, b) => b.score - a.score);
+
+    return scored.slice(0, limit);
+}
+
+function updateUserProfile(key, value) {
+    if (!memoryStore.userProfile) memoryStore.userProfile = {};
+    memoryStore.userProfile[key] = value;
+    saveMemories(memoryStore);
+}
+
+async function summarizeAndStore(userMsg, aiReply) {
+    memoryStore.conversationHistory.push({ role: 'user', content: userMsg });
+    memoryStore.conversationHistory.push({ role: 'assistant', content: aiReply });
+
+    if (memoryStore.conversationHistory.length >= 10) {
+        try {
+            const summaryPrompt = `请从以下对话中提取关键信息，用JSON格式返回：
+- topics: 话题标签数组（如["工作","音乐"]）
+- facts: 用户透露的事实数组（如["用户喜欢深夜工作"]）
+- preferences: 用户偏好数组（如["喜欢简洁回复"]）
+
+对话：
+${memoryStore.conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}
+
+只返回JSON，不要其他文字。`;
+
+            const response = await fetch(`${MIMO_API_URL}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${MIMO_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: MIMO_MODEL,
+                    messages: [{ role: 'user', content: summaryPrompt }],
+                    max_tokens: 300,
+                    temperature: 0.3
+                })
+            });
+
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content || '';
+
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.facts) {
+                    for (const fact of parsed.facts) {
+                        addMemory(fact, 'fact', parsed.topics || []);
+                    }
+                }
+                if (parsed.preferences) {
+                    for (const pref of parsed.preferences) {
+                        addMemory(pref, 'preference', ['偏好']);
+                        updateUserProfile('preferences', [
+                            ...(memoryStore.userProfile?.preferences || []),
+                            pref
+                        ]);
+                    }
+                }
+                if (parsed.topics) {
+                    for (const topic of parsed.topics) {
+                        addMemory(`用户讨论了话题：${topic}`, 'topic', [topic]);
+                    }
+                }
+            }
+        } catch (e) {
+            console.log('记忆提炼失败:', e.message);
+        }
+
+        memoryStore.conversationHistory = memoryStore.conversationHistory.slice(-4);
+        saveMemories(memoryStore);
+    }
+}
 
 // Browser automation
 let browser = null;
@@ -334,6 +461,26 @@ app.post('/api/tts', async (req, res) => {
     }
 });
 
+app.get('/api/memory', (req, res) => {
+    res.json({
+        profile: memoryStore.userProfile || {},
+        count: memoryStore.memories.length,
+        recent: memoryStore.memories.slice(-10).reverse()
+    });
+});
+
+app.get('/api/memory/search', (req, res) => {
+    const { q } = req.query;
+    if (!q) return res.json({ results: [] });
+    res.json({ results: searchMemories(q, 10) });
+});
+
+app.delete('/api/memory', (req, res) => {
+    memoryStore = { userProfile: {}, memories: [], conversationHistory: [] };
+    saveMemories(memoryStore);
+    res.json({ success: true });
+});
+
 // API endpoint to configure HomeAssistant
 app.post('/api/ha/config', (req, res) => {
     const { url, token } = req.body;
@@ -514,7 +661,29 @@ const SYSTEM_PROMPT = `你是丞相，一个智能AI助手，名字灵感来自�
 - ha_control: 控制HomeAssistant设备
 - ha_get_devices: 获取设备列表
 
-当用户要求看YouTube、搜索视频时，使用youtube_search工具。`;
+当用户要求看YouTube、搜索视频时，使用youtube_search工具。
+
+你拥有长期记忆能力。你会记住主公说过的话、喜好和习惯。在回答时，自然地引用你记住的信息，让主公感受到你在用心倾听。不要主动说"根据我的记忆"，而是自然地体现出来。`;
+
+function buildSystemPrompt() {
+    const relevant = searchMemories('用户偏好 习惯 喜好', 8);
+    const profile = memoryStore.userProfile || {};
+    let memoryContext = '';
+
+    if (relevant.length > 0) {
+        const facts = relevant.filter(m => m.type === 'fact' || m.type === 'preference')
+            .map(m => m.content);
+        if (facts.length > 0) {
+            memoryContext += '\n\n【你记住的关于主公的信息】\n' + facts.map(f => `- ${f}`).join('\n');
+        }
+    }
+
+    if (profile.preferences && profile.preferences.length > 0) {
+        memoryContext += '\n\n【主公的偏好】\n' + [...new Set(profile.preferences)].map(p => `- ${p}`).join('\n');
+    }
+
+    return SYSTEM_PROMPT + memoryContext;
+}
 
 const sessions = new Map();
 
@@ -1007,8 +1176,15 @@ wss.on('connection', (ws) => {
 });
 
 async function streamMiMoAPI(messages, ws, sessionId) {
+    const lastUserMsg = messages[messages.length - 1]?.content || '';
+    const relevantMemories = searchMemories(lastUserMsg, 5);
+    let memoryHint = '';
+    if (relevantMemories.length > 0) {
+        memoryHint = '\n\n【相关记忆】\n' + relevantMemories.map(m => `- ${m.content}`).join('\n');
+    }
+
     const formattedMessages = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt() + memoryHint },
         ...messages
     ];
 
@@ -1096,6 +1272,8 @@ async function streamMiMoAPI(messages, ws, sessionId) {
         const history = sessions.get(sessionId) || [];
         history.push({ role: 'assistant', content: fullText });
         sessions.set(sessionId, history.slice(-10));
+
+        summarizeAndStore(lastUserMsg, fullText).catch(e => console.log('记忆处理异常:', e.message));
 
     } catch (error) {
         ws.send(JSON.stringify({ type: 'error', text: '无法连接AI服务。' }));

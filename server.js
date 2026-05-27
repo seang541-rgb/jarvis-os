@@ -7,7 +7,7 @@ const { exec } = require('child_process');
 const puppeteer = require('puppeteer-core');
 const { EdgeTTS } = require('node-edge-tts');
 
-const TTS_VOICE = 'zh-CN-YunxiNeural';
+const TTS_VOICE = 'zh-CN-YunyangNeural';
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -449,23 +449,6 @@ app.post('/api/tts', async (req, res) => {
     if (!text) return res.status(400).json({ error: '缺少 text 参数' });
 
     try {
-        // Try ChatTTS first (port 5050)
-        try {
-            const chatttsResp = await fetch('http://127.0.0.1:5050/api/tts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text })
-            });
-            if (chatttsResp.ok) {
-                res.setHeader('Content-Type', 'audio/wav');
-                const buffer = Buffer.from(await chatttsResp.arrayBuffer());
-                return res.send(buffer);
-            }
-        } catch (e) {
-            // ChatTTS not available, fallback to edge-tts
-        }
-
-        // Fallback: edge-tts
         const tts = new EdgeTTS();
         const tmpFile = path.join(__dirname, '.tts_tmp.mp3');
         await tts.ttsPromise(text, tmpFile, { voice: TTS_VOICE });

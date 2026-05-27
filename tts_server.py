@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 print("Loading ChatTTS model...")
 chat = ChatTTS.Chat()
-chat.load_models(compile=False)
+chat.load(compile=False)
 print("ChatTTS model loaded!")
 
 # 丞相专用说话人嵌入 (儒雅男声风格)

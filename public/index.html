@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>丞相 - AI Assistant</title>
+    <title>子房 - AI Assistant</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
@@ -211,14 +211,14 @@
         </div>
 
         <div class="status-bar" id="status">等待唤醒</div>
-        <div class="subtitle" id="subtitle">按 Ctrl+Space 或说 "丞相" 激活</div>
+        <div class="subtitle" id="subtitle">按 Ctrl+Space 或说 "子房" 激活</div>
 
         <div class="waveform" id="waveform"></div>
 
         <div class="transcript-box" id="transcript">
             <div class="entry">
                 <div class="entry-label">CHENGXIANG</div>
-                <div class="entry-text ai">主公，丞相在此，随时听候差遣。</div>
+                <div class="entry-text ai">主公，子房在此，随时听候差遣。</div>
             </div>
         </div>
     </div>
@@ -475,7 +475,7 @@
         if (state.speaking) {
             orbState = 'speaking';
             particleColor = 'rgba(0, 230, 118, 1)';
-            statusEl.textContent = '丞相朗读中';
+            statusEl.textContent = '子房朗读中';
             statusEl.className = 'status-bar speaking';
             modeText.textContent = 'SPEAKING';
         } else if (state.listening) {
@@ -664,7 +664,7 @@
 
             audio.onplay = () => {
                 connectAudioElement(audio);
-                console.log('🗣️ 丞相朗读中');
+                console.log('🗣️ 子房朗读中');
             };
             audio.onended = () => {
                 state.speaking = false;

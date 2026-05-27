@@ -1,7 +1,7 @@
 {
-  "name": "chengxiang-assistant",
+  "name": "zifang-assistant",
   "version": "1.0.0",
-  "description": "丞相 AI Assistant MVP",
+  "description": "子房 AI Assistant MVP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

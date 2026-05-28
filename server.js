@@ -21,10 +21,11 @@ const MIMO_API_URL = 'https://token-plan-sgp.xiaomimimo.com/v1';
 const MIMO_API_KEY = process.env.MIMO_API_KEY || '';
 const MIMO_MODEL = 'mimo-v2.5-pro';
 
-// NVIDIA API (Qwen)
+// NVIDIA API
 const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
 const NVIDIA_MODEL = 'qwen/qwen3.5-122b-a10b';
+const NVIDIA_FALLBACK_MODEL = 'meta/llama-3.3-70b-instruct';
 
 // Active API config (switchable)
 let activeAPI = {
@@ -33,6 +34,23 @@ let activeAPI = {
     key: NVIDIA_API_KEY,
     model: NVIDIA_MODEL,
 };
+let consecutiveErrors = 0;
+
+function switchToFallback() {
+    if (activeAPI.model === NVIDIA_MODEL && consecutiveErrors >= 2) {
+        console.log('⚠️ Qwen 连续失败，切换到 LLaMA 3.3-70B');
+        activeAPI.model = NVIDIA_FALLBACK_MODEL;
+        consecutiveErrors = 0;
+    }
+}
+
+function switchToPrimary() {
+    if (activeAPI.model !== NVIDIA_MODEL) {
+        console.log('✅ 恢复使用 Qwen3.5-122b');
+        activeAPI.model = NVIDIA_MODEL;
+    }
+    consecutiveErrors = 0;
+}
 
 if (!MIMO_API_KEY && !NVIDIA_API_KEY) {
     console.warn('⚠️  未设置任何 API KEY！');
@@ -542,11 +560,14 @@ app.post('/api/model', (req, res) => {
     const { provider } = req.body;
     if (provider === 'nvidia') {
         activeAPI = { name: 'nvidia', url: NVIDIA_API_URL, key: NVIDIA_API_KEY, model: NVIDIA_MODEL };
+    } else if (provider === 'llama') {
+        activeAPI = { name: 'nvidia', url: NVIDIA_API_URL, key: NVIDIA_API_KEY, model: NVIDIA_FALLBACK_MODEL };
     } else if (provider === 'mimo') {
         activeAPI = { name: 'mimo', url: MIMO_API_URL, key: MIMO_API_KEY, model: MIMO_MODEL };
     } else {
         return res.status(400).json({ error: '未知模型提供商' });
     }
+    consecutiveErrors = 0;
     res.json({ success: true, active: activeAPI.name, model: activeAPI.model });
 });
 
@@ -1341,7 +1362,13 @@ async function streamMiMoAPI(messages, ws, sessionId) {
             })
         });
 
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+            consecutiveErrors++;
+            switchToFallback();
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        switchToPrimary();
 
         ws.send(JSON.stringify({ type: 'response_start' }));
 
@@ -1436,7 +1463,9 @@ async function streamMiMoAPI(messages, ws, sessionId) {
         summarizeAndStore(lastUserMsg, fullText).catch(e => console.log('记忆处理异常:', e.message));
 
     } catch (error) {
-        ws.send(JSON.stringify({ type: 'error', text: '无法连接AI服务。' }));
+        consecutiveErrors++;
+        switchToFallback();
+        ws.send(JSON.stringify({ type: 'error', text: '无法连接AI服务，正在切换备用模型...' }));
     }
 }
 

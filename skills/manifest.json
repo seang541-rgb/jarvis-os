@@ -1,0 +1,24 @@
+{
+  "skills": [
+    {
+      "id": "safety",
+      "name": "Permission confirmation",
+      "tools": ["close_app", "lock_screen", "browser_type", "ha_control", "read_file"]
+    },
+    {
+      "id": "screen",
+      "name": "Screen awareness",
+      "tools": ["capture_screen", "analyze_screen"]
+    },
+    {
+      "id": "reminders",
+      "name": "Reminders",
+      "tools": ["set_reminder", "list_reminders", "cancel_reminder"]
+    },
+    {
+      "id": "files",
+      "name": "Local files",
+      "tools": ["list_files", "read_file", "search_files"]
+    }
+  ]
+}

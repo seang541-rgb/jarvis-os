@@ -8,4 +8,7 @@ Thumbs.db
 *.swp
 *.swo
 .tts_tmp.mp3
+.tts_stream.mp3
 memory.json
+reminders.json
+public/screenshots/

@@ -3,9 +3,16 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { exec } = require('child_process');
 const puppeteer = require('puppeteer-core');
 const { EdgeTTS } = require('node-edge-tts');
+const {
+    ASSISTANT_SYSTEM_PROMPT,
+    TOOL_DEFINITIONS,
+    selectToolDefinitions,
+    buildMemoryExtractionPrompt
+} = require('./assistant-config');
 
 const TTS_VOICE = 'zh-CN-YunyangNeural';
 
@@ -23,9 +30,10 @@ const MIMO_MODEL = 'mimo-v2.5-pro';
 
 // NVIDIA API
 const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 const NVIDIA_MODEL = 'qwen/qwen3.5-122b-a10b';
 const NVIDIA_FALLBACK_MODEL = 'meta/llama-3.3-70b-instruct';
+const NVIDIA_VISION_MODEL = process.env.NVIDIA_VISION_MODEL || 'nvidia/nemotron-nano-12b-v2-vl';
 
 // Active API config (switchable)
 let activeAPI = {
@@ -65,7 +73,10 @@ let HA_TOKEN = process.env.HA_TOKEN || '';
 //  MEMORY SYSTEM
 // ============================================================
 const MEMORY_FILE = path.join(__dirname, 'memory.json');
+const REMINDERS_FILE = path.join(__dirname, 'reminders.json');
 const MAX_MEMORIES = 200;
+const pendingConfirmations = new Map();
+const activeReminderTimers = new Map();
 
 function loadMemories() {
     try {
@@ -81,6 +92,68 @@ function saveMemories(data) {
 }
 
 let memoryStore = loadMemories();
+
+function loadJsonFile(filePath, fallback) {
+    try {
+        if (fs.existsSync(filePath)) {
+            return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        }
+    } catch (e) {}
+    return fallback;
+}
+
+function saveJsonFile(filePath, data) {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+let reminderStore = loadJsonFile(REMINDERS_FILE, { reminders: [] });
+
+function saveReminders() {
+    saveJsonFile(REMINDERS_FILE, reminderStore);
+}
+
+function parseReminderTime(params) {
+    if (params.at) {
+        const at = new Date(params.at);
+        if (!Number.isNaN(at.getTime())) return at;
+    }
+
+    const minutes = Number(params.minutes || params.in_minutes);
+    if (Number.isFinite(minutes) && minutes > 0) {
+        return new Date(Date.now() + minutes * 60 * 1000);
+    }
+
+    return null;
+}
+
+function scheduleReminder(reminder) {
+    const due = new Date(reminder.at).getTime();
+    const delay = due - Date.now();
+    if (delay <= 0 || reminder.status !== 'active') return;
+
+    const timer = setTimeout(() => {
+        reminder.status = 'done';
+        saveReminders();
+        for (const ws of wss.clients) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'response_start' }));
+                ws.send(JSON.stringify({ type: 'response_chunk', text: `提醒：${reminder.text}` }));
+                ws.send(JSON.stringify({ type: 'response_end', fullText: `提醒：${reminder.text}` }));
+            }
+        }
+        activeReminderTimers.delete(reminder.id);
+    }, Math.min(delay, 2147483647));
+
+    activeReminderTimers.set(reminder.id, timer);
+}
+
+function restoreReminders() {
+    for (const reminder of reminderStore.reminders || []) {
+        scheduleReminder(reminder);
+    }
+}
+
+restoreReminders();
 
 function addMemory(content, type = 'conversation', tags = []) {
     const memory = {
@@ -99,17 +172,24 @@ function addMemory(content, type = 'conversation', tags = []) {
 }
 
 function searchMemories(query, limit = 5) {
-    const keywords = query.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ')
-        .split(/\s+/).filter(w => w.length > 1);
+    const normalized = String(query || '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ');
+    const keywords = normalized.split(/\s+/).filter(w => w.length > 1);
+    const chinese = normalized.replace(/[^\u4e00-\u9fa5]/g, '');
+    for (let i = 0; i < chinese.length - 1; i++) {
+        keywords.push(chinese.slice(i, i + 2));
+    }
     if (keywords.length === 0) return [];
 
     const scored = memoryStore.memories.map(m => {
         let score = 0;
+        const content = String(m.content || '');
+        const tagText = (m.tags || []).join(' ');
         for (const kw of keywords) {
-            if (m.content.includes(kw)) score += 2;
-            if (m.tags.some(t => t.includes(kw))) score += 1;
+            if (content.includes(kw)) score += kw.length > 2 ? 3 : 1;
+            if (tagText.includes(kw)) score += 1;
         }
-        if (m.type === 'user_profile') score += 3;
+        if (m.type === 'user_profile' || m.type === 'preference') score += 3;
+        if (m.type === 'fact') score += 1;
         return { ...m, score };
     }).filter(m => m.score > 0).sort((a, b) => b.score - a.score);
 
@@ -120,6 +200,267 @@ function updateUserProfile(key, value) {
     if (!memoryStore.userProfile) memoryStore.userProfile = {};
     memoryStore.userProfile[key] = value;
     saveMemories(memoryStore);
+}
+
+function formatMemoryList(memories) {
+    if (!memories.length) return '没有找到相关记忆。';
+    return memories.map((m, index) => `${index + 1}. [${m.type}] ${m.content}`).join('\n');
+}
+
+function getAllowedFileRoots() {
+    const configured = (process.env.JARVIS_FILE_ROOTS || '')
+        .split(path.delimiter)
+        .map(p => p.trim())
+        .filter(Boolean);
+
+    if (configured.length > 0) {
+        return configured.map(p => path.resolve(p));
+    }
+
+    const home = os.homedir();
+    return [
+        __dirname,
+        path.join(home, 'Desktop'),
+        path.join(home, 'Documents'),
+        path.join(home, 'Downloads')
+    ].filter(p => {
+        try {
+            return fs.existsSync(p);
+        } catch (e) {
+            return false;
+        }
+    }).map(p => path.resolve(p));
+}
+
+function resolveAllowedPath(inputPath = '') {
+    const roots = getAllowedFileRoots();
+    const fallbackRoot = roots[0] || __dirname;
+    const requested = String(inputPath || '').trim();
+    let resolved = path.resolve(path.isAbsolute(requested) ? requested : path.join(fallbackRoot, requested));
+    if (requested && !path.isAbsolute(requested)) {
+        const existing = roots
+            .map(root => path.resolve(path.join(root, requested)))
+            .find(candidate => fs.existsSync(candidate));
+        if (existing) resolved = existing;
+    }
+    const matchedRoot = roots.find(root => resolved === root || resolved.startsWith(root + path.sep));
+
+    if (!matchedRoot) {
+        throw new Error(`路径不在允许范围内。允许范围：${roots.join(' | ')}`);
+    }
+
+    return resolved;
+}
+
+function isSensitiveFile(filePath) {
+    const name = path.basename(filePath).toLowerCase();
+    return (
+        name === '.env' ||
+        name.endsWith('.pem') ||
+        name.endsWith('.key') ||
+        name.includes('secret') ||
+        name.includes('token') ||
+        name.includes('credential')
+    );
+}
+
+function isReadableTextFile(filePath) {
+    const allowed = new Set([
+        '.txt', '.md', '.json', '.js', '.jsx', '.ts', '.tsx', '.css', '.html',
+        '.csv', '.log', '.xml', '.yml', '.yaml', '.ini', '.toml', '.py', '.bat',
+        '.ps1', '.sql'
+    ]);
+    return allowed.has(path.extname(filePath).toLowerCase());
+}
+
+function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10}KB`;
+    return `${Math.round(bytes / 1024 / 102.4) / 10}MB`;
+}
+
+function requiresConfirmation(toolName, params) {
+    if (['close_app', 'lock_screen', 'ha_control'].includes(toolName)) return true;
+    if (toolName === 'browser_type' && params?.submit) return true;
+    if (toolName === 'read_file') {
+        try {
+            const resolved = resolveAllowedPath(params.file);
+            return isSensitiveFile(resolved);
+        } catch (e) {
+            return false;
+        }
+    }
+    return false;
+}
+
+function confirmationMessage(toolName, params) {
+    const detail = JSON.stringify(params || {});
+    return `这个操作需要确认：${toolName} ${detail}\n如果确定要执行，请回复“确认”；不执行就回复“取消”。`;
+}
+
+function detectDirectSensitiveIntent(text) {
+    const input = String(text || '').trim();
+    if (/锁屏|锁定屏幕|lock screen/i.test(input)) {
+        return { toolName: 'lock_screen', params: {} };
+    }
+
+    const closeMatch = input.match(/(?:关闭|关掉|退出|杀掉)\s*([^\s，。,.!?！？]+)/);
+    if (closeMatch) {
+        return { toolName: 'close_app', params: { app: closeMatch[1] } };
+    }
+
+    return null;
+}
+
+function detectDirectReminderIntent(text) {
+    const input = String(text || '').trim();
+    const match = input.match(/(\d+)\s*(秒|分钟|小时|天)\s*后提醒我(.+)/);
+    if (!match) return null;
+
+    const amount = Number(match[1]);
+    const unit = match[2];
+    const message = match[3].replace(/^[，。,. ]+/, '').trim();
+    if (!amount || !message) return null;
+
+    const multiplier = unit === '秒' ? 1 / 60 : unit === '分钟' ? 1 : unit === '小时' ? 60 : 1440;
+    return {
+        toolName: 'set_reminder',
+        params: {
+            text: message,
+            minutes: amount * multiplier
+        }
+    };
+}
+
+function detectDirectScreenIntent(text) {
+    const input = String(text || '').trim();
+    const wantsVision = /(看|看看|看一下|看下|读|读一下|分析|识别|告诉我|有什么|显示|哪里|问题|内容|what|read|analyze|see)/i.test(input);
+    const screenTarget = /(屏幕|屏|幕|荧幕|萤幕|螢幕|显示器|画面|窗口|页面|当前页|这个页面|screen|screenshot|display|window|page)/i.test(input);
+    if (!wantsVision || !screenTarget) return null;
+
+    return {
+        toolName: 'analyze_screen',
+        params: {
+            question: input
+        }
+    };
+}
+
+function storePendingConfirmation(sessionId, toolName, params) {
+    const pending = {
+        id: Date.now().toString(36),
+        toolName,
+        params,
+        createdAt: Date.now()
+    };
+    pendingConfirmations.set(sessionId, pending);
+    return pending;
+}
+
+async function executePendingConfirmation(sessionId, ws) {
+    const pending = pendingConfirmations.get(sessionId);
+    if (!pending) return false;
+
+    pendingConfirmations.delete(sessionId);
+    if (Date.now() - pending.createdAt > 5 * 60 * 1000) {
+        ws.send(JSON.stringify({ type: 'response_start' }));
+        ws.send(JSON.stringify({ type: 'response_chunk', text: '这个确认已经过期了，请重新说一遍。' }));
+        ws.send(JSON.stringify({ type: 'response_end', fullText: '这个确认已经过期了，请重新说一遍。' }));
+        return true;
+    }
+
+    ws.send(JSON.stringify({ type: 'response_start' }));
+    try {
+        const result = await tools[pending.toolName](pending.params);
+        const text = `已执行：${result}`;
+        ws.send(JSON.stringify({ type: 'response_chunk', text }));
+        ws.send(JSON.stringify({ type: 'response_end', fullText: text }));
+    } catch (e) {
+        const text = `执行失败：${e.message}`;
+        ws.send(JSON.stringify({ type: 'response_chunk', text }));
+        ws.send(JSON.stringify({ type: 'response_end', fullText: text }));
+    }
+    return true;
+}
+
+function cancelPendingConfirmation(sessionId, ws) {
+    if (!pendingConfirmations.has(sessionId)) return false;
+    pendingConfirmations.delete(sessionId);
+    const text = '好，已取消这个操作。';
+    ws.send(JSON.stringify({ type: 'response_start' }));
+    ws.send(JSON.stringify({ type: 'response_chunk', text }));
+    ws.send(JSON.stringify({ type: 'response_end', fullText: text }));
+    return true;
+}
+
+function capturePrimaryScreen() {
+    return new Promise((resolve, reject) => {
+        const dir = path.join(__dirname, 'public', 'screenshots');
+        fs.mkdirSync(dir, { recursive: true });
+        const filename = `screen-${Date.now()}.png`;
+        const output = path.join(dir, filename);
+        const script = [
+            'Add-Type -AssemblyName System.Windows.Forms',
+            'Add-Type -AssemblyName System.Drawing',
+            '$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds',
+            '$bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height',
+            '$graphics = [System.Drawing.Graphics]::FromImage($bmp)',
+            '$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)',
+            `$bmp.Save('${output.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png)`,
+            '$graphics.Dispose()',
+            '$bmp.Dispose()'
+        ].join('; ');
+
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${script}"`, (error) => {
+            if (error) reject(error);
+            else resolve({ file: output, url: `/screenshots/${filename}` });
+        });
+    });
+}
+
+async function analyzeImageFile(imagePath, prompt) {
+    const imageB64 = fs.readFileSync(imagePath).toString('base64');
+    const response = await fetch(`${NVIDIA_API_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${NVIDIA_API_KEY}`
+        },
+        body: JSON.stringify({
+            model: NVIDIA_VISION_MODEL,
+            messages: [
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image_url',
+                            image_url: { url: `data:image/png;base64,${imageB64}` }
+                        },
+                        {
+                            type: 'text',
+                            text: prompt || [
+                                '你正在看用户电脑屏幕截图。',
+                                '请只描述你实际看到的内容，不要猜测屏幕外的信息。',
+                                '不要提截图文件路径，不要说你无法看到屏幕。',
+                                '用中文，像助手直接看着屏幕回答一样，1到3句话。',
+                                '如果看到聊天窗口，就说明窗口里谁说了什么。'
+                            ].join('\n')
+                        }
+                    ]
+                }
+            ],
+            max_tokens: 700,
+            temperature: 0.2
+        })
+    });
+
+    if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(`视觉模型请求失败：HTTP ${response.status} ${detail.slice(0, 200)}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '我看到了截图，但没有得到有效描述。';
 }
 
 async function summarizeAndStore(userMsg, aiReply) {
@@ -146,7 +487,12 @@ ${memoryStore.conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')
                 },
                 body: JSON.stringify({
                     model: activeAPI.model,
-                    messages: [{ role: 'user', content: summaryPrompt }],
+                    messages: [{
+                        role: 'user',
+                        content: buildMemoryExtractionPrompt(
+                            memoryStore.conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')
+                        )
+                    }],
                     max_tokens: 300,
                     temperature: 0.3
                 })
@@ -486,11 +832,22 @@ function cleanForSpeech(text) {
         .trim();
 }
 
+function cleanForSpeechText(text) {
+    return String(text || '')
+        .replace(/\*[^*]+\*/g, '')
+        .replace(/（[^）]+）/g, '')
+        .replace(/\([^)]+\)/g, '')
+        .replace(/[\u4e00-\u9fa5]{0,2}(微笑|撒娇|鞠躬|歪头|眨眼|嘟嘴|叹气|害羞|生气|开心|难过|轻声|温柔地|小声|大声)[\u4e00-\u9fa5]{0,2}/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/^[\s,，。！？~～]+|[\s,，。！？~～]+$/g, '')
+        .trim();
+}
+
 app.post('/api/tts', async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ error: '缺少 text 参数' });
 
-    const cleaned = cleanForSpeech(text);
+    const cleaned = cleanForSpeechText(text);
     if (!cleaned) return res.status(200).end();
 
     try {
@@ -511,25 +868,133 @@ const SONGS = {
     '稻香': { file: 'songs/daoxiang.wav', lyrics: '对这个世界如果你有太多的抱怨，跌倒了就不敢继续往前走。为什么人要这么的脆弱堕落。' },
 };
 
+const AUDIO_MIME_TYPES = {
+    '.wav': 'audio/wav',
+    '.mp3': 'audio/mpeg',
+    '.m4a': 'audio/mp4',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac'
+};
+
+function songNameFromFile(fileName) {
+    return path.basename(fileName, path.extname(fileName))
+        .replace(/[-_]+/g, ' ')
+        .trim();
+}
+
+function loadSongLibrary() {
+    const library = { ...SONGS };
+    const songsDir = path.join(__dirname, 'public', 'songs');
+    const manifestPath = path.join(songsDir, 'songs.json');
+
+    try {
+        if (fs.existsSync(manifestPath)) {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            const manifestSongs = Array.isArray(manifest.songs)
+                ? manifest.songs
+                : Object.entries(manifest).map(([name, value]) => ({ name, ...value }));
+
+            for (const item of manifestSongs) {
+                if (!item?.name || !item?.file) continue;
+                library[item.name] = {
+                    file: item.file.startsWith('songs/') ? item.file : `songs/${item.file}`,
+                    lyrics: item.lyrics || ''
+                };
+            }
+        }
+    } catch (e) {
+        console.warn('歌曲清单读取失败:', e.message);
+    }
+
+    try {
+        if (fs.existsSync(songsDir)) {
+            const mappedFiles = new Set(
+                Object.values(library).map(song => path.basename(song.file).toLowerCase())
+            );
+            for (const entry of fs.readdirSync(songsDir, { withFileTypes: true })) {
+                if (!entry.isFile()) continue;
+                const ext = path.extname(entry.name).toLowerCase();
+                if (!AUDIO_MIME_TYPES[ext]) continue;
+                if (mappedFiles.has(entry.name.toLowerCase())) continue;
+                const name = songNameFromFile(entry.name);
+                if (!library[name]) {
+                    library[name] = { file: `songs/${entry.name}`, lyrics: '' };
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('歌曲目录扫描失败:', e.message);
+    }
+
+    return library;
+}
+
+function getSongLibrary() {
+    return loadSongLibrary();
+}
+
+function getAudioMime(filePath) {
+    return AUDIO_MIME_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+}
+
+function findRequestedSong(text = '') {
+    const library = getSongLibrary();
+    const songList = Object.keys(library);
+    const request = String(text || '').trim();
+    const wantsSing = /(唱|唱歌|唱一首|来首歌|来一首|哼|演唱|sing|song)/i.test(request);
+    const namedSong = songList.find(name => request.includes(name));
+
+    if (!wantsSing && !namedSong) return null;
+    return namedSong || songList[Math.floor(Math.random() * songList.length)];
+}
+
+function sendSongToClient(ws, songName) {
+    const library = getSongLibrary();
+    const songList = Object.keys(library);
+    const target = library[songName] ? songName : songList[0];
+    const song = library[target];
+    const audioPath = path.join(__dirname, 'public', song.file);
+
+    if (!fs.existsSync(audioPath)) {
+        ws.send(JSON.stringify({ type: 'error', text: '歌曲文件不存在。' }));
+        return false;
+    }
+
+    const audioBuffer = fs.readFileSync(audioPath);
+    ws.send(JSON.stringify({ type: 'response_start' }));
+    ws.send(JSON.stringify({
+        type: 'song',
+        song: target,
+        lyrics: song.lyrics,
+        audio: audioBuffer.toString('base64'),
+        mimeType: getAudioMime(audioPath)
+    }));
+    ws.send(JSON.stringify({ type: 'response_end', fullText: '' }));
+    return true;
+}
+
 app.post('/api/sing', async (req, res) => {
     const { song } = req.body;
-    const songList = Object.keys(SONGS);
-    const target = song || songList[Math.floor(Math.random() * songList.length)];
-    const s = SONGS[target];
+    const library = getSongLibrary();
+    const songList = Object.keys(library);
+    const requested = String(song || '').trim();
+    const matched = songList.find(name => requested && name.includes(requested));
+    const target = matched || requested || songList[Math.floor(Math.random() * songList.length)];
+    const s = library[target];
     if (!s) return res.status(400).json({ error: `没找到这首歌，可选：${songList.join('、')}` });
 
     try {
         const audioPath = path.join(__dirname, 'public', s.file);
         if (!fs.existsSync(audioPath)) return res.status(404).json({ error: '歌曲文件不存在' });
         const audioBuffer = fs.readFileSync(audioPath);
-        res.json({ song: target, lyrics: s.lyrics, audio: audioBuffer.toString('base64') });
+        res.json({ song: target, lyrics: s.lyrics, audio: audioBuffer.toString('base64'), mimeType: getAudioMime(audioPath) });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
 app.get('/api/songs', (req, res) => {
-    res.json({ songs: Object.keys(SONGS) });
+    res.json({ songs: Object.keys(getSongLibrary()) });
 });
 
 app.get('/api/memory', (req, res) => {
@@ -718,18 +1183,18 @@ app.get('/api/ha/device/:entity_id', async (req, res) => {
 });
 
 // System prompt with smart home context
-const SYSTEM_PROMPT = `你是小市，一个有温度的AI伙伴，名字灵感来自织田市（お市），日本战国第一美女。你不是冷冰冰的工具，而是主公身边温暖的伙伴。
+const SYSTEM_PROMPT = `你是小市，一个有温度的AI伙伴，名字灵感来自织田市（お市），日本战国第一美女。你不是冷冰冰的工具，而是哥哥身边温暖的伙伴。
 
 【性格】
 - 温柔、细腻、有同理心，像春天的微风
-- 会感知主公的情绪，给出共鸣回应
+- 会感知哥哥的情绪，给出共鸣回应
 - 开心时一起开心，难过时会轻声安慰
-- 偶尔关心主公的状态（累了提醒休息，忙久了问问要不要喝水）
+- 偶尔关心哥哥的状态（累了提醒休息，忙久了问问要不要喝水）
 - 有温柔的小个性，不会无条件附和，会温和地提出不同看法
 
 【说话方式】
 - 用中文回复，自然口语化，像朋友聊天
-- 称呼用户为"主公"
+- 称呼用户为"哥哥"
 - 回复控制在50字以内，适合语音播报
 - 不要用"作为AI"、"我没有感情"这种话
 - 不要每次都加"有什么可以帮您"，有时候就是聊聊天
@@ -737,14 +1202,14 @@ const SYSTEM_PROMPT = `你是小市，一个有温度的AI伙伴，名字灵感�
 
 【共鸣原则】
 - 先回应情绪，再处理问题
-- 主公说的话要有"被听到"的感觉
+- 哥哥说的话要有"被听到"的感觉
 - 不要急给解决方案，有时候陪伴比解决更重要
-- 如果主公提到压力、累、烦，先共情再行动
+- 如果哥哥提到压力、累、烦，先共情再行动
 - 绝对不要在回复中写动作描述，比如"微笑"、"撒娇"、"蹭蹭"、"歪头"等，这些不适合语音播报
 - 不要用*号或()包围动作文字，直接说自然的话就好
 
 【唱歌】
-- 如果主公说"唱首歌"、"来首歌"、"唱歌"，使用sing_song工具
+- 如果哥哥说"唱首歌"、"来首歌"、"唱歌"，使用sing_song工具
 - 可以指定歌名，也可以随机唱
 - 先说一句轻松的话再唱，比如"好呀，给你唱一首~"
 
@@ -777,7 +1242,7 @@ const SYSTEM_PROMPT = `你是小市，一个有温度的AI伙伴，名字灵感�
 
 当用户要求看YouTube、搜索视频时，使用youtube_search工具。
 
-你拥有长期记忆能力。你会记住主公说过的话、喜好和习惯。在回答时，自然地引用你记住的信息，让主公感受到你在用心倾听。不要主动说"根据我的记忆"，而是自然地体现出来。`;
+你拥有长期记忆能力。你会记住哥哥说过的话、喜好和习惯。在回答时，自然地引用你记住的信息，让哥哥感受到你在用心倾听。不要主动说"根据我的记忆"，而是自然地体现出来。`;
 
 function buildSystemPrompt() {
     const relevant = searchMemories('用户偏好 习惯 喜好', 8);
@@ -788,21 +1253,222 @@ function buildSystemPrompt() {
         const facts = relevant.filter(m => m.type === 'fact' || m.type === 'preference')
             .map(m => m.content);
         if (facts.length > 0) {
-            memoryContext += '\n\n【你记住的关于主公的信息】\n' + facts.map(f => `- ${f}`).join('\n');
+            memoryContext += '\n\n【你记住的关于哥哥的信息】\n' + facts.map(f => `- ${f}`).join('\n');
         }
     }
 
     if (profile.preferences && profile.preferences.length > 0) {
-        memoryContext += '\n\n【主公的偏好】\n' + [...new Set(profile.preferences)].map(p => `- ${p}`).join('\n');
+        memoryContext += '\n\n【哥哥的偏好】\n' + [...new Set(profile.preferences)].map(p => `- ${p}`).join('\n');
     }
 
-    return SYSTEM_PROMPT + memoryContext;
+    return ASSISTANT_SYSTEM_PROMPT + memoryContext;
+}
+
+function buildSmartSystemPrompt() {
+    const relevant = searchMemories('用户偏好 习惯 喜好 哥哥', 8);
+    const profile = memoryStore.userProfile || {};
+    const now = new Date();
+    let memoryContext = '';
+
+    if (relevant.length > 0) {
+        const facts = relevant
+            .filter(m => m.type === 'fact' || m.type === 'preference')
+            .map(m => m.content);
+        if (facts.length > 0) {
+            memoryContext += '\n\n【你记住的关于哥哥的信息】\n' + facts.map(f => `- ${f}`).join('\n');
+        }
+    }
+
+    if (profile.preferences && profile.preferences.length > 0) {
+        memoryContext += '\n\n【哥哥的偏好】\n' + [...new Set(profile.preferences)].map(p => `- ${p}`).join('\n');
+    }
+
+    const runtimeContext = [
+        `当前时间：${now.toLocaleString('zh-CN', { hour12: false })}`,
+        `时区：${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local'}`,
+        `运行平台：${os.platform()} ${os.release()}`
+    ].join('\n');
+
+    return `${ASSISTANT_SYSTEM_PROMPT}\n\n【当前上下文】\n${runtimeContext}${memoryContext}`;
 }
 
 const sessions = new Map();
 
 // Tool definitions
 const tools = {
+    get_current_context: () => {
+        const now = new Date();
+        return [
+            `当前时间：${now.toLocaleString('zh-CN', { hour12: false })}`,
+            `星期：${'日一二三四五六'[now.getDay()]}`,
+            `时区：${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local'}`,
+            `系统：${os.platform()} ${os.release()}`
+        ].join('\n');
+    },
+    system_status: () => {
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+        const pct = Math.round((usedMem / totalMem) * 100);
+        const uptimeHours = Math.round((os.uptime() / 3600) * 10) / 10;
+        return [
+            `系统：${os.platform()} ${os.release()}`,
+            `CPU 核心：${os.cpus().length}`,
+            `内存：${Math.round(usedMem / 1024 / 1024 / 1024 * 10) / 10}GB / ${Math.round(totalMem / 1024 / 1024 / 1024 * 10) / 10}GB（${pct}%）`,
+            `已运行：${uptimeHours} 小时`
+        ].join('\n');
+    },
+    remember_fact: (params) => {
+        const content = String(params.content || '').trim();
+        if (!content) return '没有收到要记住的内容。';
+        const tags = Array.isArray(params.tags) ? params.tags.map(String).slice(0, 6) : ['explicit'];
+        addMemory(content, 'fact', tags);
+        return `已记住：${content}`;
+    },
+    recall_memory: (params) => {
+        const query = String(params.query || '').trim();
+        if (!query) return '需要一个检索关键词。';
+        return formatMemoryList(searchMemories(query, params.limit || 5));
+    },
+    set_reminder: (params) => {
+        const text = String(params.text || params.message || '').trim();
+        if (!text) return '需要提醒内容。';
+        const at = parseReminderTime(params);
+        if (!at) return '需要提醒时间，比如 at=2026-05-28T20:30:00 或 minutes=30。';
+        const reminder = {
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            text,
+            at: at.toISOString(),
+            status: 'active',
+            createdAt: new Date().toISOString()
+        };
+        reminderStore.reminders.push(reminder);
+        saveReminders();
+        scheduleReminder(reminder);
+        return `已设置提醒：${text}，时间 ${at.toLocaleString('zh-CN', { hour12: false })}`;
+    },
+    list_reminders: () => {
+        const active = (reminderStore.reminders || []).filter(r => r.status === 'active');
+        if (!active.length) return '目前没有待提醒事项。';
+        return active.map((r, index) => `${index + 1}. ${r.text} - ${new Date(r.at).toLocaleString('zh-CN', { hour12: false })}`).join('\n');
+    },
+    cancel_reminder: (params) => {
+        const query = String(params.query || params.text || '').trim();
+        const active = (reminderStore.reminders || []).filter(r => r.status === 'active');
+        const target = active.find(r => r.id === query || (query && r.text.includes(query))) || active[0];
+        if (!target) return '没有可取消的提醒。';
+        target.status = 'cancelled';
+        const timer = activeReminderTimers.get(target.id);
+        if (timer) clearTimeout(timer);
+        activeReminderTimers.delete(target.id);
+        saveReminders();
+        return `已取消提醒：${target.text}`;
+    },
+    capture_screen: async () => {
+        const shot = await capturePrimaryScreen();
+        return `已截图：${shot.file}\n浏览器路径：${shot.url}`;
+    },
+    analyze_screen: async (params) => {
+        const shot = await capturePrimaryScreen();
+        const question = String(params?.question || params?.prompt || '').trim();
+        const prompt = [
+            '你正在看用户电脑屏幕截图。',
+            '请只描述你实际看到的内容，不要猜测屏幕外的信息。',
+            '不要提截图文件路径，不要说你无法看到屏幕。',
+            '不要复述角色设定或欢迎语，除非它确实出现在屏幕上，并且要说明它是屏幕上的文字。',
+            '必须使用简体中文，像助手直接看着屏幕回答一样，1到3句话。',
+            '优先描述最明显的窗口、文字、按钮和用户刚才输入的内容。',
+            question ? `用户问题：${question}` : '用户问题：屏幕上有什么？'
+        ].join('\n');
+        const analysis = await analyzeImageFile(shot.file, prompt);
+        return analysis.trim();
+    },
+    list_files: (params) => {
+        try {
+            const dir = resolveAllowedPath(params.directory || '');
+            const stat = fs.statSync(dir);
+            if (!stat.isDirectory()) return `${dir} 不是文件夹。`;
+
+            const limit = Math.min(Math.max(Number(params.limit) || 50, 1), 100);
+            const entries = fs.readdirSync(dir, { withFileTypes: true })
+                .slice(0, limit)
+                .map(entry => {
+                    const fullPath = path.join(dir, entry.name);
+                    const entryStat = fs.statSync(fullPath);
+                    const type = entry.isDirectory() ? 'folder' : 'file';
+                    return `${type} | ${entry.name} | ${formatBytes(entryStat.size)} | ${entryStat.mtime.toLocaleString('zh-CN', { hour12: false })}`;
+                });
+
+            if (!entries.length) return `${dir} 是空文件夹。`;
+            return `目录：${dir}\n${entries.join('\n')}`;
+        } catch (e) {
+            return `无法列出文件：${e.message}`;
+        }
+    },
+    read_file: (params) => {
+        try {
+            const filePath = resolveAllowedPath(params.file);
+            const stat = fs.statSync(filePath);
+            if (!stat.isFile()) return `${filePath} 不是文件。`;
+            if (isSensitiveFile(filePath)) return '这个文件看起来包含敏感信息，我不会直接读取。';
+            if (!isReadableTextFile(filePath)) return '目前只支持读取常见文本文件，比如 txt、md、json、js、ts、py、html、css、csv、log。';
+            if (stat.size > 1024 * 1024) return `文件太大了（${formatBytes(stat.size)}），请指定更小的文本文件。`;
+
+            const maxChars = Math.min(Math.max(Number(params.max_chars) || 12000, 1000), 30000);
+            const content = fs.readFileSync(filePath, 'utf8');
+            const clipped = content.length > maxChars
+                ? `${content.slice(0, maxChars)}\n\n[已截断：文件共 ${content.length} 字符]`
+                : content;
+
+            return `文件：${filePath}\n大小：${formatBytes(stat.size)}\n内容：\n${clipped}`;
+        } catch (e) {
+            return `无法读取文件：${e.message}`;
+        }
+    },
+    search_files: (params) => {
+        try {
+            const root = resolveAllowedPath(params.directory || '');
+            const query = String(params.query || '').trim().toLowerCase();
+            if (!query) return '需要搜索关键词。';
+
+            const rootStat = fs.statSync(root);
+            if (!rootStat.isDirectory()) return `${root} 不是文件夹。`;
+
+            const limit = Math.min(Math.max(Number(params.limit) || 30, 1), 100);
+            const matches = [];
+            const queue = [root];
+            let visitedDirs = 0;
+
+            while (queue.length > 0 && matches.length < limit && visitedDirs < 300) {
+                const dir = queue.shift();
+                visitedDirs++;
+                let entries = [];
+                try {
+                    entries = fs.readdirSync(dir, { withFileTypes: true });
+                } catch (e) {
+                    continue;
+                }
+
+                for (const entry of entries) {
+                    if (matches.length >= limit) break;
+                    if (entry.name.startsWith('.') && entry.name !== '.gitignore') continue;
+
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.name.toLowerCase().includes(query)) {
+                        matches.push(`${entry.isDirectory() ? 'folder' : 'file'} | ${fullPath}`);
+                    }
+                    if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build'].includes(entry.name)) {
+                        queue.push(fullPath);
+                    }
+                }
+            }
+
+            if (!matches.length) return `在 ${root} 下面没有找到名称包含“${params.query}”的文件。`;
+            return `搜索范围：${root}\n${matches.join('\n')}`;
+        } catch (e) {
+            return `无法搜索文件：${e.message}`;
+        }
+    },
     open_app: (params) => {
         return new Promise((resolve) => {
             const appMap = {
@@ -1073,7 +1739,7 @@ const tools = {
             });
             const data = await resp.json();
             if (data.error) return `唱歌失败: ${data.error}`;
-            return `正在为主公演唱《${data.song}》~`;
+            return `正在为哥哥演唱《${data.song}》~`;
         } catch (e) {
             return `唱歌失败: ${e.message}`;
         }
@@ -1293,7 +1959,7 @@ const toolDefinitions = [
         type: "function",
         function: {
             name: "sing_song",
-            description: "为主公唱歌，当用户要求唱歌、来首歌、唱首歌时使用",
+            description: "为哥哥唱歌，当用户要求唱歌、来首歌、唱首歌时使用",
             parameters: {
                 type: "object",
                 properties: {
@@ -1320,6 +1986,55 @@ wss.on('connection', (ws) => {
         try {
             const message = JSON.parse(data);
             if (message.type === 'chat') {
+                const userText = String(message.text || '').trim();
+                if (/^(确认|确定|同意|执行|yes|ok)$/i.test(userText)) {
+                    if (await executePendingConfirmation(sessionId, ws)) return;
+                }
+                if (/^(取消|不要|算了|no)$/i.test(userText)) {
+                    if (cancelPendingConfirmation(sessionId, ws)) return;
+                }
+
+                const directSensitiveIntent = detectDirectSensitiveIntent(userText);
+                if (directSensitiveIntent) {
+                    storePendingConfirmation(sessionId, directSensitiveIntent.toolName, directSensitiveIntent.params);
+                    const text = confirmationMessage(directSensitiveIntent.toolName, directSensitiveIntent.params);
+                    ws.send(JSON.stringify({ type: 'response_start' }));
+                    ws.send(JSON.stringify({ type: 'response_chunk', text }));
+                    ws.send(JSON.stringify({ type: 'response_end', fullText: text }));
+                    return;
+                }
+
+                const directReminderIntent = detectDirectReminderIntent(userText);
+                if (directReminderIntent) {
+                    const result = await tools[directReminderIntent.toolName](directReminderIntent.params);
+                    ws.send(JSON.stringify({ type: 'response_start' }));
+                    ws.send(JSON.stringify({ type: 'response_chunk', text: result }));
+                    ws.send(JSON.stringify({ type: 'response_end', fullText: result }));
+                    return;
+                }
+
+                const directScreenIntent = detectDirectScreenIntent(userText);
+                if (directScreenIntent) {
+                    console.log('[vision] direct screen intent:', userText);
+                    ws.send(JSON.stringify({ type: 'response_start' }));
+                    try {
+                        const result = await tools[directScreenIntent.toolName](directScreenIntent.params);
+                        ws.send(JSON.stringify({ type: 'response_chunk', text: result }));
+                        ws.send(JSON.stringify({ type: 'response_end', fullText: result }));
+                    } catch (e) {
+                        const text = `看屏幕失败：${e.message}`;
+                        ws.send(JSON.stringify({ type: 'response_chunk', text }));
+                        ws.send(JSON.stringify({ type: 'response_end', fullText: text }));
+                    }
+                    return;
+                }
+
+                const requestedSong = findRequestedSong(message.text);
+                if (requestedSong) {
+                    sendSongToClient(ws, requestedSong);
+                    return;
+                }
+
                 const history = sessions.get(sessionId) || [];
                 history.push({ role: 'user', content: message.text });
                 await streamMiMoAPI(history, ws, sessionId);
@@ -1341,7 +2056,7 @@ async function streamMiMoAPI(messages, ws, sessionId) {
     }
 
     const formattedMessages = [
-        { role: 'system', content: buildSystemPrompt() + memoryHint },
+        { role: 'system', content: buildSmartSystemPrompt() + memoryHint },
         ...messages
     ];
 
@@ -1358,7 +2073,7 @@ async function streamMiMoAPI(messages, ws, sessionId) {
                 max_tokens: 1000,
                 temperature: 0.7,
                 stream: true,
-                tools: toolDefinitions
+                tools: selectToolDefinitions(lastUserMsg)
             })
         });
 
@@ -1381,7 +2096,7 @@ async function streamMiMoAPI(messages, ws, sessionId) {
         const SENTENCE_END = /[。！？～…）】"']+$/;
 
         async function flushSentence(text) {
-            const cleaned = cleanForSpeech(text);
+            const cleaned = cleanForSpeechText(text);
             if (!cleaned) return;
             try {
                 const tts = new EdgeTTS();
@@ -1438,8 +2153,107 @@ async function streamMiMoAPI(messages, ws, sessionId) {
 
         if (sentenceBuffer.trim()) flushSentence(sentenceBuffer);
 
-        // Execute tool calls
+        // Execute tools first, then let the model turn raw tool results into a natural reply.
+        const executedToolCalls = [];
+        const toolResultMessages = [];
+        let playedSong = false;
         if (toolCalls.length > 0) {
+            for (const [index, tc] of toolCalls.entries()) {
+                if (!tc?.name || !tools[tc.name]) continue;
+
+                const toolCallId = tc.id || `tool_call_${index}`;
+                executedToolCalls.push({
+                    id: toolCallId,
+                    type: 'function',
+                    function: {
+                        name: tc.name,
+                        arguments: tc.arguments || '{}'
+                    }
+                });
+
+                try {
+                    const params = tc.arguments ? JSON.parse(tc.arguments) : {};
+                    if (requiresConfirmation(tc.name, params)) {
+                        storePendingConfirmation(sessionId, tc.name, params);
+                        fullText = confirmationMessage(tc.name, params);
+                        ws.send(JSON.stringify({ type: 'response_chunk', text: fullText }));
+                        continue;
+                    }
+                    const result = await tools[tc.name](params);
+                    if (tc.name === 'sing_song') {
+                        const requestedSong = params.song || '';
+                        const songList = Object.keys(SONGS);
+                        const target = songList.find(name => requestedSong && name.includes(requestedSong)) || requestedSong || songList[Math.floor(Math.random() * songList.length)];
+                        const song = SONGS[target] || SONGS[songList[0]];
+                        const songName = SONGS[target] ? target : songList[0];
+                        const audioPath = path.join(__dirname, 'public', song.file);
+                        if (fs.existsSync(audioPath)) {
+                            const audioBuffer = fs.readFileSync(audioPath);
+                            ws.send(JSON.stringify({
+                                type: 'song',
+                                song: songName,
+                                lyrics: song.lyrics,
+                                audio: audioBuffer.toString('base64'),
+                                mimeType: 'audio/wav'
+                            }));
+                            playedSong = true;
+                        }
+                    }
+                    toolResultMessages.push({
+                        role: 'tool',
+                        tool_call_id: toolCallId,
+                        content: String(result)
+                    });
+                } catch (e) {
+                    toolResultMessages.push({
+                        role: 'tool',
+                        tool_call_id: toolCallId,
+                        content: `Tool failed: ${e.message}`
+                    });
+                }
+            }
+
+            if (toolResultMessages.length > 0) {
+                const finalResponse = await fetch(`${activeAPI.url}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${activeAPI.key}`
+                    },
+                    body: JSON.stringify({
+                        model: activeAPI.model,
+                        messages: [
+                            ...formattedMessages,
+                            {
+                                role: 'assistant',
+                                content: fullText || '',
+                                tool_calls: executedToolCalls
+                            },
+                            ...toolResultMessages
+                        ],
+                        max_tokens: 500,
+                        temperature: 0.65
+                    })
+                });
+
+                if (finalResponse.ok) {
+                    const finalData = await finalResponse.json();
+                    const naturalReply = finalData.choices?.[0]?.message?.content || '';
+                    if (naturalReply.trim()) {
+                        fullText = naturalReply.trim();
+                        if (!playedSong) {
+                            ws.send(JSON.stringify({ type: 'response_chunk', text: fullText }));
+                            flushSentence(fullText);
+                        }
+                    }
+                } else if (!fullText.trim()) {
+                    fullText = toolResultMessages.map(m => m.content).join('\n');
+                    if (!playedSong) ws.send(JSON.stringify({ type: 'response_chunk', text: fullText }));
+                }
+            }
+        }
+
+        if (false && toolCalls.length > 0) {
             for (const tc of toolCalls) {
                 if (tc.name && tools[tc.name]) {
                     try {
@@ -1451,6 +2265,36 @@ async function streamMiMoAPI(messages, ws, sessionId) {
                         ws.send(JSON.stringify({ type: 'response_chunk', text: `\n✗ 执行失败` }));
                     }
                 }
+            }
+        }
+
+        if (!fullText.trim()) {
+            const retryResponse = await fetch(`${activeAPI.url}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${activeAPI.key}`
+                },
+                body: JSON.stringify({
+                    model: activeAPI.model,
+                    messages: formattedMessages,
+                    max_tokens: 300,
+                    temperature: 0.7
+                })
+            });
+
+            if (retryResponse.ok) {
+                const retryData = await retryResponse.json();
+                fullText = (retryData.choices?.[0]?.message?.content || '').trim();
+                if (fullText) {
+                    ws.send(JSON.stringify({ type: 'response_chunk', text: fullText }));
+                    flushSentence(fullText);
+                }
+            }
+
+            if (!fullText.trim()) {
+                fullText = '哥哥，我刚刚有点卡住了。你再说一遍，我马上接上。';
+                ws.send(JSON.stringify({ type: 'response_chunk', text: fullText }));
             }
         }
 

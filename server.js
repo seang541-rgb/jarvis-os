@@ -474,26 +474,9 @@ app.post('/api/tts', async (req, res) => {
 });
 
 const SONGS = {
-    '小幸运': {
-        lyrics: '我听见雨滴落在青青草地，我听见远方下课钟声响起。可是我没有听见你的声音，认真呼唤我姓名。爱上你的时候还不懂感情，离别了才觉得刻骨铭心。为什么没有发现遇见了你，是生命最好的事情。',
-        rate: '-15%', pitch: '+10Hz'
-    },
-    '晴天': {
-        lyrics: '故事的小黄花，从出生那年就飘着。童年的荡秋千，随记忆一直晃到现在。吹着前奏望着天空，我想起花瓣试着掉落。为你翘课的那一天，花落的那一天。教室的那一间，我怎么看不见。消失的下雨天，我好想再淋一遍。',
-        rate: '-10%', pitch: '+5Hz'
-    },
-    '稻香': {
-        lyrics: '对这个世界如果你有太多的抱怨，跌倒了就不敢继续往前走。为什么人要这么的脆弱堕落，请你打开电视看看。多少人为生命在努力勇敢的走下去，我们是不是该知足。珍惜一切就算没有拥有，随着稻香河流继续奔跑。',
-        rate: '-12%', pitch: '+8Hz'
-    },
-    '起风了': {
-        lyrics: '我曾将青春翻涌成她，也曾指尖弹出盛夏。心之所动且就随缘去吧，逆着光行走任风吹雨打。短短的路走走停停，也有了几分的距离。不知抚摸的是故事还是段心情，也许期待的不过是与时间为敌。',
-        rate: '-18%', pitch: '+12Hz'
-    },
-    '夜曲': {
-        lyrics: '一群嗜血的蚂蚁被腐肉所吸引，我面无表情看孤独的风景。失去你爱的能力，走在街上看到人群。心在跳是爱情如烈火，你在笑是疯狂的人群。为你弹奏萧邦的夜曲，纪念我死去的爱情。',
-        rate: '-14%', pitch: '+6Hz'
-    }
+    '小幸运': { file: 'songs/xiaoxingyun.wav', lyrics: '我听见雨滴落在青青草地，我听见远方下课钟声响起。可是我没有听见你的声音，认真呼唤我姓名。' },
+    '晴天': { file: 'songs/qingtian.wav', lyrics: '故事的小黄花，从出生那年就飘着。童年的荡秋千，随记忆一直晃到现在。' },
+    '稻香': { file: 'songs/daoxiang.wav', lyrics: '对这个世界如果你有太多的抱怨，跌倒了就不敢继续往前走。为什么人要这么的脆弱堕落。' },
 };
 
 app.post('/api/sing', async (req, res) => {
@@ -504,10 +487,9 @@ app.post('/api/sing', async (req, res) => {
     if (!s) return res.status(400).json({ error: `没找到这首歌，可选：${songList.join('、')}` });
 
     try {
-        const tts = new EdgeTTS();
-        const tmpFile = path.join(__dirname, '.tts_sing.mp3');
-        await tts.ttsPromise(s.lyrics, tmpFile, { voice: TTS_VOICE, rate: s.rate, pitch: s.pitch });
-        const audioBuffer = fs.readFileSync(tmpFile);
+        const audioPath = path.join(__dirname, 'public', s.file);
+        if (!fs.existsSync(audioPath)) return res.status(404).json({ error: '歌曲文件不存在' });
+        const audioBuffer = fs.readFileSync(audioPath);
         res.json({ song: target, lyrics: s.lyrics, audio: audioBuffer.toString('base64') });
     } catch (error) {
         res.status(500).json({ error: error.message });
